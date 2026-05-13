@@ -126,7 +126,6 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
 }
 
 .mealshark-eyebrow,
-.mealshark-section-header p,
 .mealshark-restaurant,
 .mealshark-meta,
 .mealshark-description,
@@ -177,17 +176,20 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
 }
 
 .mealshark-metric {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
   min-width: 0;
   padding: 10px;
   border: 1px solid #dbe3ef;
   border-radius: 8px;
   background: #ffffff;
+  white-space: nowrap;
 }
 
 .mealshark-metric strong {
   overflow: hidden;
+  flex: 0 0 auto;
   font-size: 16px;
   line-height: 1.1;
   text-overflow: ellipsis;
@@ -195,8 +197,76 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
 }
 
 .mealshark-metric span {
+  min-width: 0;
+  overflow: hidden;
   color: #64748b;
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mealshark-mode-control {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.35fr);
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+
+.mealshark-credit-mode-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+}
+
+.mealshark-mode-button {
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  font: 800 12px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mealshark-credit-mode-group-active .mealshark-mode-button:first-child {
+  border-right: 0;
+  border-radius: 6px 0 0 6px;
+}
+
+.mealshark-mode-direction {
+  width: 42px;
+  padding: 0;
+  border-radius: 0 6px 6px 0;
+  color: #0f172a;
+  font-size: 19px;
+  line-height: 1;
+}
+
+.mealshark-mode-direction[hidden] {
+  display: none !important;
+}
+
+.mealshark-mode-button:hover,
+.mealshark-mode-button:focus-visible {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.mealshark-mode-button-active {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.mealshark-mode-button-active:hover,
+.mealshark-mode-button-active:focus-visible {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
 }
 
 .mealshark-controls {
@@ -208,22 +278,25 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
 }
 
 .mealshark-top-label {
-  display: grid;
-  gap: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: #475569;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .mealshark-top-input {
-  width: 78px;
-  height: 34px;
-  padding: 0 9px;
+  width: 56px;
+  height: 30px;
+  padding: 0 6px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   background: #ffffff;
   color: #111827;
   font: inherit;
+  text-align: center;
 }
 
 .mealshark-filter-toggle {
@@ -296,26 +369,7 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
 }
 
 .mealshark-section {
-  padding: 2px 14px 16px;
-}
-
-.mealshark-section-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 4px 0 10px;
-}
-
-.mealshark-section-header h3 {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.2;
-}
-
-.mealshark-section-header p {
-  color: #64748b;
-  font-size: 12px;
+  padding: 0 14px 16px;
 }
 
 .mealshark-list {

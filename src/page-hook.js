@@ -15,6 +15,7 @@
   let latestMenuUrl = "";
   let latestDiscounts = new Map();
   let latestCreditUnitPrice = null;
+  const latestCreditUnitPrices = new Map();
   let mapActionToken = 0;
 
   const HOVER_LAYER_IDS = [
@@ -81,6 +82,30 @@
       return parsedUrl.hostname.endsWith("mealpal.com") && parsedUrl.pathname === "/1/functions/getCurrentUser";
     } catch (_error) {
       return false;
+    }
+  }
+
+  function isProductOfferingUrl(url) {
+    try {
+      const parsedUrl = new URL(url, window.location.href);
+
+      return (
+        parsedUrl.hostname.endsWith("mealpal.com") &&
+        /^\/api\/v\d+\/product_offerings\/[^/]+\/?$/.test(parsedUrl.pathname)
+      );
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function getProductOfferingFromUrl(url) {
+    try {
+      const parsedUrl = new URL(url, window.location.href);
+      const match = parsedUrl.pathname.match(/\/product_offerings\/([^/]+)/);
+
+      return match ? decodeURIComponent(match[1]) : "";
+    } catch (_error) {
+      return "";
     }
   }
 
@@ -171,21 +196,90 @@
       capturedAt: new Date().toISOString(),
       generatedAt: safeString(body?.generated_at),
       date: safeString(body?.date),
-      creditUnitPrice: latestCreditUnitPrice,
+      cityName: safeString(body?.city?.name),
+      creditUnitPrice: getCreditUnitPriceForMenu(url),
       meals
     };
   }
 
-  function extractCreditUnitPrice(body) {
-    const result = body?.result || {};
-    const lunchKits = result.lunchPlanMealKits;
-
-    if (!lunchKits || typeof lunchKits !== "object") {
+  function extractPriceFromKitMap(kitMap, preferredKeys = []) {
+    if (!kitMap || typeof kitMap !== "object") {
       return null;
     }
 
-    for (const kit of Object.values(lunchKits)) {
-      const price = toNumber(kit?.pricePerMeal);
+    const orderedKeys = [
+      ...preferredKeys.map((key) => safeString(key)),
+      ...Object.keys(kitMap)
+    ].filter(Boolean);
+    const seen = new Set();
+
+    for (const key of orderedKeys) {
+      const normalizedKey = key.toLowerCase();
+
+      if (seen.has(normalizedKey)) {
+        continue;
+      }
+
+      seen.add(normalizedKey);
+
+      const kit = kitMap[key] || kitMap[normalizedKey];
+      const price = toNumber(kit?.pricePerMeal ?? kit?.price_per_meal);
+
+      if (price !== null) {
+        return price;
+      }
+    }
+
+    return null;
+  }
+
+  function getCreditUnitPriceForMenu(url) {
+    const offering = getProductOfferingFromUrl(url);
+
+    if (offering) {
+      return latestCreditUnitPrices.get(offering) ?? null;
+    }
+
+    return latestCreditUnitPrice;
+  }
+
+  function extractUserCreditUnitPrices(body) {
+    const result = body?.result || {};
+    const preferredPlanKeys = [
+      result.lunchPlanType,
+      result.planType,
+      "standard"
+    ];
+    const prices = new Map();
+    const lunchPrice = extractPriceFromKitMap(result.lunchPlanMealKits, preferredPlanKeys);
+    const dinnerPrice = extractPriceFromKitMap(result.dinnerPlanMealKits, [
+      result.dinnerPlanType,
+      result.planType,
+      "standard"
+    ]);
+
+    if (lunchPrice !== null) {
+      prices.set("lunch", lunchPrice);
+    }
+
+    if (dinnerPrice !== null) {
+      prices.set("dinner", dinnerPrice);
+    }
+
+    return prices;
+  }
+
+  function extractProductOfferingCreditUnitPrice(body) {
+    const plans = [body?.cycle?.plan, body?.cycle?.next_plan].filter(Boolean);
+
+    for (const plan of plans) {
+      const kitPrice = extractPriceFromKitMap(plan?.plan_meal_kits, [plan?.plan_type, plan?.type, "standard"]);
+
+      if (kitPrice !== null) {
+        return kitPrice;
+      }
+
+      const price = toNumber(plan?.price_per_meal);
 
       if (price !== null) {
         return price;
@@ -481,10 +575,40 @@
     }
   }
 
-  function parseCurrentUserText(_url, text) {
+  function parseCreditPricingText(_url, text) {
     try {
-      latestCreditUnitPrice = extractCreditUnitPrice(JSON.parse(text));
-      postLatestMenu();
+      const body = JSON.parse(text);
+      let updated = false;
+
+      if (isCurrentUserUrl(_url)) {
+        const prices = extractUserCreditUnitPrices(body);
+
+        for (const [offering, price] of prices) {
+          latestCreditUnitPrices.set(offering, price);
+          updated = true;
+        }
+
+        latestCreditUnitPrice = prices.get("lunch") ?? prices.values().next().value ?? latestCreditUnitPrice;
+      } else {
+        const offering = getProductOfferingFromUrl(_url);
+        const creditUnitPrice = extractProductOfferingCreditUnitPrice(body);
+
+        if (creditUnitPrice !== null) {
+          if (offering) {
+            latestCreditUnitPrices.set(offering, creditUnitPrice);
+          }
+
+          if (!latestMenuUrl || getProductOfferingFromUrl(latestMenuUrl) === offering) {
+            latestCreditUnitPrice = creditUnitPrice;
+          }
+
+          updated = true;
+        }
+      }
+
+      if (updated) {
+        postLatestMenu();
+      }
     } catch (_error) {
       // Ignore non-JSON or unexpected response shapes.
     }
@@ -493,9 +617,9 @@
   function inspectFetchResponse(url, response) {
     const isMenu = isMenuUrl(url);
     const isDiscount = isDiscountUrl(url);
-    const isCurrentUser = isCurrentUserUrl(url);
+    const isCreditPricing = isCurrentUserUrl(url) || isProductOfferingUrl(url);
 
-    if (!isMenu && !isDiscount && !isCurrentUser) {
+    if (!isMenu && !isDiscount && !isCreditPricing) {
       return;
     }
 
@@ -508,7 +632,7 @@
         } else if (isDiscount) {
           parseDiscountText(url, text);
         } else {
-          parseCurrentUserText(url, text);
+          parseCreditPricingText(url, text);
         }
       })
       .catch(() => {});
@@ -541,9 +665,9 @@
         const url = this.__mealsharkUrl || this.responseURL || "";
         const isMenu = isMenuUrl(url);
         const isDiscount = isDiscountUrl(url);
-        const isCurrentUser = isCurrentUserUrl(url);
+        const isCreditPricing = isCurrentUserUrl(url) || isProductOfferingUrl(url);
 
-        if ((!isMenu && !isDiscount && !isCurrentUser) || typeof this.responseText !== "string") {
+        if ((!isMenu && !isDiscount && !isCreditPricing) || typeof this.responseText !== "string") {
           return;
         }
 
@@ -552,7 +676,7 @@
         } else if (isDiscount) {
           parseDiscountText(url, this.responseText);
         } else {
-          parseCurrentUserText(url, this.responseText);
+          parseCreditPricingText(url, this.responseText);
         }
       });
 

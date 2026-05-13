@@ -10,6 +10,11 @@
   const MAP_ACTION = "mealshark-map-action";
   const APP_TILE_ANNOTATED_CLASS = "mealshark-app-tile-annotated";
   const APP_TILE_PRICE_CLASS = "mealshark-app-price-line";
+  const SORT_MODES = {
+    DISCOUNT: "discount",
+    CREDIT_DESC: "credit-desc",
+    CREDIT_ASC: "credit-asc"
+  };
 
   const state = {
     collapsed: false,
@@ -17,9 +22,11 @@
     mealIndex: new Map(),
     menuUrl: "",
     capturedAt: "",
+    cityName: "",
     creditUnitPrice: null,
     topN: 50,
     newOnly: false,
+    sortMode: SORT_MODES.DISCOUNT,
     selectedMealKey: ""
   };
 
@@ -47,6 +54,7 @@
     state.collapsed = Boolean(settings.collapsed);
     state.topN = hasCurrentSettings ? clampTopN(settings.topN ?? state.topN) : state.topN;
     state.newOnly = Boolean(settings.newOnly);
+    state.sortMode = normalizeSortMode(settings.sortMode);
   }
 
   function saveSettings() {
@@ -55,9 +63,14 @@
         version: SETTINGS_VERSION,
         collapsed: state.collapsed,
         topN: state.topN,
-        newOnly: state.newOnly
+        newOnly: state.newOnly,
+        sortMode: state.sortMode
       }
     });
+  }
+
+  function normalizeSortMode(value) {
+    return Object.values(SORT_MODES).includes(value) ? value : SORT_MODES.DISCOUNT;
   }
 
   function clampTopN(value) {
@@ -169,16 +182,47 @@
     dom.newMealsMetric = buildMetric("New", "0");
     metrics.append(dom.totalMealsMetric, dom.newMealsMetric);
 
+    dom.modeControl = createElement("div", "mealshark-mode-control");
+    dom.modeControl.setAttribute("role", "group");
+    dom.modeControl.setAttribute("aria-label", "Sort mode");
+    const discountModeButton = buildModeButton(
+      SORT_MODES.DISCOUNT,
+      "Best discounts",
+      "Sort by discount percentage"
+    );
+    const creditModeButton = buildModeButton(
+      SORT_MODES.CREDIT_DESC,
+      "Best value for credits",
+      "Sort by credit bucket, then discount percentage"
+    );
+    dom.modeButtons = [
+      discountModeButton,
+      creditModeButton
+    ];
+    dom.creditModeGroup = createElement("div", "mealshark-credit-mode-group");
+    dom.creditDirectionButton = createElement("button", "mealshark-mode-button mealshark-mode-direction", "⬆️");
+    dom.creditDirectionButton.type = "button";
+    dom.creditDirectionButton.addEventListener("click", () => {
+      state.sortMode =
+        state.sortMode === SORT_MODES.CREDIT_DESC ? SORT_MODES.CREDIT_ASC : SORT_MODES.CREDIT_DESC;
+      saveSettings();
+      render();
+    });
+    dom.creditModeGroup.append(creditModeButton, dom.creditDirectionButton);
+    dom.modeControl.append(discountModeButton, dom.creditModeGroup);
+
     const controls = createElement("div", "mealshark-controls");
     const topLabel = createElement("label", "mealshark-top-label");
-    const topLabelText = createElement("span", null, "Results displayed");
+    const topLabelStart = createElement("span", null, "Display");
     dom.topNInput = createElement("input", "mealshark-top-input");
     dom.topNInput.type = "number";
     dom.topNInput.min = "1";
     dom.topNInput.max = "100";
     dom.topNInput.step = "1";
     dom.topNInput.value = String(state.topN);
-    topLabel.append(topLabelText, dom.topNInput);
+    dom.topNInput.setAttribute("aria-label", "Number of results to display");
+    const topLabelEnd = createElement("span", null, "results");
+    topLabel.append(topLabelStart, dom.topNInput, topLabelEnd);
 
     const filterLabel = createElement("label", "mealshark-filter-toggle");
     dom.newOnlyInput = createElement("input");
@@ -198,7 +242,7 @@
     );
 
     const mealSection = createElement("section", "mealshark-section");
-    mealSection.append(buildSectionHeader("Best discounts"));
+    mealSection.append(dom.modeControl);
     dom.mealList = createElement("div", "mealshark-list");
     mealSection.append(dom.mealList);
 
@@ -239,24 +283,42 @@
     const metricValue = createElement("strong", null, value);
     const metricLabel = createElement("span", null, label);
 
+    metric.setAttribute("aria-label", `${value} ${label}`);
     metric.append(metricValue, metricLabel);
     return metric;
   }
 
-  function setMetric(metric, value) {
+  function buildModeButton(sortMode, label, ariaLabel) {
+    const button = createElement("button", "mealshark-mode-button", label);
+
+    button.type = "button";
+    button.dataset.sortMode = sortMode;
+    button.setAttribute("aria-label", ariaLabel);
+    button.addEventListener("click", () => {
+      state.sortMode =
+        sortMode === SORT_MODES.CREDIT_DESC && isCreditSortMode(state.sortMode)
+          ? state.sortMode
+          : sortMode;
+      saveSettings();
+      render();
+    });
+
+    return button;
+  }
+
+  function setMetric(metric, value, label) {
     const valueElement = metric.querySelector("strong");
+    const labelElement = metric.querySelector("span");
 
     if (valueElement) {
       valueElement.textContent = value;
     }
-  }
 
-  function buildSectionHeader(title) {
-    const header = createElement("div", "mealshark-section-header");
-    const titleElement = createElement("h3", null, title);
+    if (labelElement && label !== undefined) {
+      labelElement.textContent = label;
+    }
 
-    header.append(titleElement);
-    return header;
+    metric.setAttribute("aria-label", `${value} ${labelElement?.textContent || ""}`.trim());
   }
 
   function handleMenuPayload(payload) {
@@ -268,14 +330,79 @@
     state.mealIndex = buildMealIndex(state.meals);
     state.menuUrl = payload.url || "";
     state.capturedAt = payload.capturedAt || new Date().toISOString();
+    state.cityName = safeString(payload.cityName);
     state.creditUnitPrice = toFiniteNumber(payload.creditUnitPrice);
     render();
     scheduleMealPalTileAnnotation();
   }
 
+  function formatMetricCityName(cityName) {
+    return cityName === "New York City" ? "New York" : cityName;
+  }
+
+  function buildMetricLabel(label) {
+    const cityName = formatMetricCityName(state.cityName);
+
+    return cityName ? `${label} in ${cityName}` : label;
+  }
+
   function getDiscount(meal) {
     const discount = Number(meal.discountPercentage);
     return Number.isFinite(discount) ? discount : 0;
+  }
+
+  function getCreditBucket(meal) {
+    return toFiniteNumber(meal.mealCreditPrice);
+  }
+
+  function isCreditSortMode(sortMode) {
+    return sortMode === SORT_MODES.CREDIT_DESC || sortMode === SORT_MODES.CREDIT_ASC;
+  }
+
+  function compareByName(left, right) {
+    return (
+      getRestaurantName(left).localeCompare(getRestaurantName(right)) ||
+      getMealName(left).localeCompare(getMealName(right))
+    );
+  }
+
+  function compareByDiscount(left, right) {
+    const discountDifference = getDiscount(right) - getDiscount(left);
+    return discountDifference || compareByName(left, right);
+  }
+
+  function compareByCreditBucket(left, right, direction) {
+    const leftCredit = getCreditBucket(left);
+    const rightCredit = getCreditBucket(right);
+
+    if (leftCredit === null && rightCredit === null) {
+      return compareByDiscount(left, right);
+    }
+
+    if (leftCredit === null) {
+      return 1;
+    }
+
+    if (rightCredit === null) {
+      return -1;
+    }
+
+    const creditDifference = direction === "desc" ? rightCredit - leftCredit : leftCredit - rightCredit;
+    return creditDifference || compareByDiscount(left, right);
+  }
+
+  function sortMeals(meals) {
+    const sortedMeals = meals.slice();
+
+    if (state.sortMode === SORT_MODES.CREDIT_DESC) {
+      return sortedMeals.sort((left, right) => compareByCreditBucket(left, right, "desc"));
+    }
+
+    if (state.sortMode === SORT_MODES.CREDIT_ASC) {
+      return sortedMeals.sort((left, right) => compareByCreditBucket(left, right, "asc"));
+    }
+
+    return sortedMeals.sort(compareByDiscount);
   }
 
   function formatDiscount(meal) {
@@ -356,7 +483,7 @@
     const effectivePrice = getEffectiveMealPrice(meal);
 
     if (effectivePrice) {
-      priceParts.push(`real ${effectivePrice}`);
+      priceParts.push(effectivePrice);
     }
 
     if (meal.retailPrice) {
@@ -542,21 +669,39 @@
 
     const newMeals = state.meals.filter((meal) => meal.isNew);
     const listMeals = state.newOnly ? newMeals : state.meals;
-    const filteredDiscounts = listMeals
-      .slice()
-      .sort((left, right) => getDiscount(right) - getDiscount(left))
-      .slice(0, state.topN);
+    const sortedMeals = sortMeals(listMeals).slice(0, state.topN);
 
-    setMetric(dom.totalMealsMetric, String(state.meals.length));
-    setMetric(dom.newMealsMetric, String(newMeals.length));
+    setMetric(dom.totalMealsMetric, String(state.meals.length), buildMetricLabel("Meals"));
+    setMetric(dom.newMealsMetric, String(newMeals.length), "New");
 
     dom.topNInput.value = String(state.topN);
     dom.newOnlyInput.checked = state.newOnly;
     dom.emptyState.hidden = state.meals.length > 0;
 
+    for (const button of dom.modeButtons) {
+      const sortMode = button.dataset.sortMode;
+      const active =
+        sortMode === SORT_MODES.CREDIT_DESC ? isCreditSortMode(state.sortMode) : sortMode === state.sortMode;
+      button.classList.toggle("mealshark-mode-button-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    }
+
+    const creditModeActive = isCreditSortMode(state.sortMode);
+    dom.creditModeGroup.classList.toggle("mealshark-credit-mode-group-active", creditModeActive);
+    dom.creditDirectionButton.hidden = !creditModeActive;
+    dom.creditDirectionButton.textContent = state.sortMode === SORT_MODES.CREDIT_DESC ? "⬆️" : "⬇️";
+    dom.creditDirectionButton.setAttribute(
+      "aria-label",
+      state.sortMode === SORT_MODES.CREDIT_DESC
+        ? "Credit buckets sorted most credits first"
+        : "Credit buckets sorted least credits first"
+    );
+    dom.creditDirectionButton.title =
+      state.sortMode === SORT_MODES.CREDIT_DESC ? "Most credits first" : "Least credits first";
+
     renderMealList(
       dom.mealList,
-      filteredDiscounts,
+      sortedMeals,
       state.newOnly ? "No new meals in the captured menu." : "No discount data in the captured menu."
     );
   }
