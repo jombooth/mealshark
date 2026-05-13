@@ -33,6 +33,7 @@
   const dom = {};
   let tileObserver = null;
   let annotationTimer = 0;
+  let currentHref = window.location.href;
 
   function getPageSnapshot() {
     return {
@@ -90,6 +91,12 @@
     }
 
     document.addEventListener("DOMContentLoaded", callback, { once: true });
+  }
+
+  function isSupportedPage() {
+    const normalizedPath = window.location.pathname.replace(/\/+$/, "");
+
+    return normalizedPath === "/lunch" || normalizedPath === "/dinner";
   }
 
   function createElement(tag, className, text) {
@@ -620,7 +627,7 @@
   }
 
   function annotateMealPalTiles() {
-    if (!state.mealIndex.size) {
+    if (!isSupportedPage() || !state.mealIndex.size) {
       return;
     }
 
@@ -630,6 +637,10 @@
   }
 
   function scheduleMealPalTileAnnotation() {
+    if (!isSupportedPage()) {
+      return;
+    }
+
     if (annotationTimer) {
       return;
     }
@@ -660,8 +671,18 @@
       return;
     }
 
-    document.documentElement.classList.toggle(PAGE_OPEN_CLASS, !state.collapsed);
-    document.documentElement.classList.toggle(PAGE_COLLAPSED_CLASS, state.collapsed);
+    const supportedPage = isSupportedPage();
+
+    document.documentElement.classList.toggle(PAGE_OPEN_CLASS, supportedPage && !state.collapsed);
+    document.documentElement.classList.toggle(PAGE_COLLAPSED_CLASS, supportedPage && state.collapsed);
+    dom.root.hidden = !supportedPage;
+
+    if (!supportedPage) {
+      dom.bubble.hidden = true;
+      dom.panel.hidden = true;
+      return;
+    }
+
     dom.root.classList.toggle("mealshark-collapsed", state.collapsed);
     dom.bubble.hidden = !state.collapsed;
     dom.bubble.setAttribute("aria-expanded", String(!state.collapsed));
@@ -802,7 +823,32 @@
   }
 
   function requestLatestMenu() {
+    if (!isSupportedPage()) {
+      return;
+    }
+
     window.postMessage({ source: "mealshark-content", type: REQUEST_LATEST }, window.location.origin);
+  }
+
+  function handleRouteChange() {
+    if (window.location.href === currentHref) {
+      return;
+    }
+
+    currentHref = window.location.href;
+    savePageSnapshot();
+    render();
+
+    if (isSupportedPage()) {
+      requestLatestMenu();
+      scheduleMealPalTileAnnotation();
+    }
+  }
+
+  function startRouteObserver() {
+    window.addEventListener("popstate", handleRouteChange);
+    window.addEventListener("hashchange", handleRouteChange);
+    window.setInterval(handleRouteChange, 500);
   }
 
   window.addEventListener("message", (event) => {
@@ -821,6 +867,7 @@
 
     ready(() => {
       ensureRoot();
+      startRouteObserver();
       startMealPalTileObserver();
       render();
       requestLatestMenu();
