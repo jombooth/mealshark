@@ -8,18 +8,24 @@
   const PAGE_SOURCE = "mealshark-page-hook";
   const REQUEST_LATEST = "mealshark-request-latest-menu";
   const MAP_ACTION = "mealshark-map-action";
+  const APP_TILE_ANNOTATED_CLASS = "mealshark-app-tile-annotated";
+  const APP_TILE_PRICE_CLASS = "mealshark-app-price-line";
 
   const state = {
     collapsed: false,
     meals: [],
+    mealIndex: new Map(),
     menuUrl: "",
     capturedAt: "",
+    creditUnitPrice: null,
     topN: 50,
     newOnly: false,
     selectedMealKey: ""
   };
 
   const dom = {};
+  let tileObserver = null;
+  let annotationTimer = 0;
 
   function getPageSnapshot() {
     return {
@@ -85,6 +91,46 @@
     }
 
     return element;
+  }
+
+  function safeString(value) {
+    return typeof value === "string" ? value.trim() : "";
+  }
+
+  function normalizeLookupText(value) {
+    return safeString(value)
+      .toLowerCase()
+      .replace(/&/g, "and")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  function buildLookupKey(mealName, restaurantName, address) {
+    return [mealName, restaurantName, address].map(normalizeLookupText).join("|");
+  }
+
+  function buildMealIndex(meals) {
+    const index = new Map();
+
+    for (const meal of meals) {
+      const mealName = getMealName(meal);
+      const restaurantName = getRestaurantName(meal);
+      const address = meal.address || meal.fullAddress || "";
+      const keys = [
+        buildLookupKey(mealName, restaurantName, address),
+        buildLookupKey(mealName, restaurantName, "")
+      ];
+
+      for (const key of keys) {
+        if (!index.has(key)) {
+          index.set(key, []);
+        }
+
+        index.get(key).push(meal);
+      }
+    }
+
+    return index;
   }
 
   function ensureRoot() {
@@ -219,9 +265,12 @@
     }
 
     state.meals = payload.meals;
+    state.mealIndex = buildMealIndex(state.meals);
     state.menuUrl = payload.url || "";
     state.capturedAt = payload.capturedAt || new Date().toISOString();
+    state.creditUnitPrice = toFiniteNumber(payload.creditUnitPrice);
     render();
+    scheduleMealPalTileAnnotation();
   }
 
   function getDiscount(meal) {
@@ -256,6 +305,11 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  function toFiniteNumber(value) {
+    const number = typeof value === "number" ? value : Number.parseFloat(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
   function formatMoney(value) {
     if (!Number.isFinite(value)) {
       return "";
@@ -269,19 +323,47 @@
     }).format(value);
   }
 
-  function formatCreditPrice(meal) {
-    const creditPrice = meal.mealCreditPrice;
-    const creditText = `${creditPrice} ${creditPrice === 1 ? "credit" : "credits"}`;
+  function getEffectiveMealPrice(meal) {
+    const creditPrice = toFiniteNumber(meal.mealCreditPrice);
+
+    if (creditPrice !== null && state.creditUnitPrice !== null) {
+      return formatMoney(creditPrice * state.creditUnitPrice);
+    }
+
     const retailPrice = parseMoney(meal.retailPrice);
 
     if (retailPrice === null) {
+      return "";
+    }
+
+    return formatMoney(Math.max(retailPrice * (1 - getDiscount(meal) / 100), 0));
+  }
+
+  function formatCreditPrice(meal) {
+    const creditPrice = meal.mealCreditPrice;
+    const creditText = `${creditPrice} ${creditPrice === 1 ? "credit" : "credits"}`;
+    const effectivePrice = getEffectiveMealPrice(meal);
+
+    if (!effectivePrice) {
       return creditText;
     }
 
-    const effectivePrice = retailPrice * (1 - getDiscount(meal) / 100);
-    const formattedPrice = formatMoney(Math.max(effectivePrice, 0));
+    return `${creditText} (${effectivePrice})`;
+  }
 
-    return formattedPrice ? `${creditText} (${formattedPrice})` : creditText;
+  function formatMealPalTilePrice(meal) {
+    const priceParts = [];
+    const effectivePrice = getEffectiveMealPrice(meal);
+
+    if (effectivePrice) {
+      priceParts.push(`real ${effectivePrice}`);
+    }
+
+    if (meal.retailPrice) {
+      priceParts.push(`retail ${meal.retailPrice}`);
+    }
+
+    return priceParts.join(" | ");
   }
 
   function getMealName(meal) {
@@ -313,6 +395,137 @@
       },
       window.location.origin
     );
+  }
+
+  function findMealPalTiles() {
+    return Array.from(document.querySelectorAll("button.bg-white.border.rounded-md")).filter((button) => {
+      if (button.closest(`#${ROOT_ID}`)) {
+        return false;
+      }
+
+      return /\bSAVE\s+\d+(?:\.\d+)?%/i.test(button.innerText || "");
+    });
+  }
+
+  function getMealPalTileFields(tile) {
+    const content = tile.children[1];
+
+    if (!content) {
+      return null;
+    }
+
+    const fields = Array.from(content.children)
+      .filter((child) => !child.classList.contains(APP_TILE_PRICE_CLASS))
+      .map((child) => safeString(child.textContent));
+
+    if (fields.length < 2) {
+      return null;
+    }
+
+    return {
+      mealName: fields[0],
+      restaurantName: fields[1],
+      address: fields[2] || "",
+      mealCreditPrice: toFiniteNumber(tile.querySelector(".rounded-meal-credit-price")?.textContent)
+    };
+  }
+
+  function getMealForTile(tile) {
+    const fields = getMealPalTileFields(tile);
+
+    if (!fields) {
+      return null;
+    }
+
+    const candidates = [
+      ...(state.mealIndex.get(buildLookupKey(fields.mealName, fields.restaurantName, fields.address)) || []),
+      ...(state.mealIndex.get(buildLookupKey(fields.mealName, fields.restaurantName, "")) || [])
+    ];
+
+    if (!candidates.length) {
+      return null;
+    }
+
+    if (fields.mealCreditPrice !== null) {
+      const matchingCreditMeal = candidates.find((meal) => {
+        const creditPrice = toFiniteNumber(meal.mealCreditPrice);
+        return creditPrice !== null && Math.abs(creditPrice - fields.mealCreditPrice) < 0.01;
+      });
+
+      if (matchingCreditMeal) {
+        return matchingCreditMeal;
+      }
+    }
+
+    return candidates[0];
+  }
+
+  function annotateMealPalTile(tile) {
+    const content = tile.children[1];
+    const existingLine = tile.querySelector(`.${APP_TILE_PRICE_CLASS}`);
+    const meal = getMealForTile(tile);
+    const priceText = meal ? formatMealPalTilePrice(meal) : "";
+
+    if (!content || !priceText) {
+      existingLine?.remove();
+      tile.classList.remove(APP_TILE_ANNOTATED_CLASS);
+      delete tile.dataset.mealsharkPriceKey;
+      return;
+    }
+
+    const priceKey = `${meal.scheduleId || ""}:${priceText}`;
+    let priceLine = existingLine;
+
+    if (!priceLine) {
+      priceLine = createElement("div", APP_TILE_PRICE_CLASS);
+      const contentChildren = Array.from(content.children).filter(
+        (child) => !child.classList.contains(APP_TILE_PRICE_CLASS)
+      );
+      content.insertBefore(priceLine, contentChildren[3] || null);
+    }
+
+    if (tile.dataset.mealsharkPriceKey !== priceKey) {
+      priceLine.textContent = priceText;
+      tile.dataset.mealsharkPriceKey = priceKey;
+    }
+
+    tile.classList.add(APP_TILE_ANNOTATED_CLASS);
+  }
+
+  function annotateMealPalTiles() {
+    if (!state.mealIndex.size) {
+      return;
+    }
+
+    for (const tile of findMealPalTiles()) {
+      annotateMealPalTile(tile);
+    }
+  }
+
+  function scheduleMealPalTileAnnotation() {
+    if (annotationTimer) {
+      return;
+    }
+
+    annotationTimer = window.setTimeout(() => {
+      annotationTimer = 0;
+      annotateMealPalTiles();
+    }, 100);
+  }
+
+  function startMealPalTileObserver() {
+    if (tileObserver || !document.body) {
+      return;
+    }
+
+    tileObserver = new MutationObserver(scheduleMealPalTileAnnotation);
+    tileObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+
+    window.addEventListener("scroll", scheduleMealPalTileAnnotation, true);
   }
 
   function render() {
@@ -463,6 +676,7 @@
 
     ready(() => {
       ensureRoot();
+      startMealPalTileObserver();
       render();
       requestLatestMenu();
     });

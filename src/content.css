@@ -17,7 +17,6 @@ html.mealshark-page-open body {
   max-width: calc(100% - var(--mealshark-split-width)) !important;
   min-width: 0 !important;
   padding-right: 0 !important;
-  overflow-x: hidden !important;
 }
 
 html.mealshark-page-open body > #root,
@@ -26,7 +25,6 @@ html.mealshark-page-open body > #app {
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
-  overflow-x: clip !important;
 }
 
 html.mealshark-page-open body > #root [class~="fixed"][class~="w-full"],
@@ -442,6 +440,18 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
   font-size: 12px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.mealshark-app-tile-annotated .mealshark-app-price-line {
+  flex: 0 0 auto;
+  margin: 0 0 6px;
+  overflow: hidden;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 760px) {

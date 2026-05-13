@@ -14,6 +14,7 @@
   let latestMenuBody = null;
   let latestMenuUrl = "";
   let latestDiscounts = new Map();
+  let latestCreditUnitPrice = null;
   let mapActionToken = 0;
 
   const HOVER_LAYER_IDS = [
@@ -68,6 +69,16 @@
           parsedUrl.pathname
         )
       );
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function isCurrentUserUrl(url) {
+    try {
+      const parsedUrl = new URL(url, window.location.href);
+
+      return parsedUrl.hostname.endsWith("mealpal.com") && parsedUrl.pathname === "/1/functions/getCurrentUser";
     } catch (_error) {
       return false;
     }
@@ -149,7 +160,7 @@
           isNew: schedule?.is_featured === true,
           discountLabel: discount?.label || "",
           discountPercentage: discount?.percentage ?? toDiscountPercentage(schedule?.mp_discount_percentage),
-          mealCreditPrice: toNumber(schedule?.meal_credit_price),
+          mealCreditPrice: toNumber(schedule?.half_meal_credit_price) ?? toNumber(schedule?.meal_credit_price),
           retailPrice: safeString(meal?.retail_price_display_string)
         });
       }
@@ -160,8 +171,28 @@
       capturedAt: new Date().toISOString(),
       generatedAt: safeString(body?.generated_at),
       date: safeString(body?.date),
+      creditUnitPrice: latestCreditUnitPrice,
       meals
     };
+  }
+
+  function extractCreditUnitPrice(body) {
+    const result = body?.result || {};
+    const lunchKits = result.lunchPlanMealKits;
+
+    if (!lunchKits || typeof lunchKits !== "object") {
+      return null;
+    }
+
+    for (const kit of Object.values(lunchKits)) {
+      const price = toNumber(kit?.pricePerMeal);
+
+      if (price !== null) {
+        return price;
+      }
+    }
+
+    return null;
   }
 
   function getReactFiber(element, prefix) {
@@ -450,11 +481,21 @@
     }
   }
 
+  function parseCurrentUserText(_url, text) {
+    try {
+      latestCreditUnitPrice = extractCreditUnitPrice(JSON.parse(text));
+      postLatestMenu();
+    } catch (_error) {
+      // Ignore non-JSON or unexpected response shapes.
+    }
+  }
+
   function inspectFetchResponse(url, response) {
     const isMenu = isMenuUrl(url);
     const isDiscount = isDiscountUrl(url);
+    const isCurrentUser = isCurrentUserUrl(url);
 
-    if (!isMenu && !isDiscount) {
+    if (!isMenu && !isDiscount && !isCurrentUser) {
       return;
     }
 
@@ -464,8 +505,10 @@
       .then((text) => {
         if (isMenu) {
           parseMenuText(url, text);
-        } else {
+        } else if (isDiscount) {
           parseDiscountText(url, text);
+        } else {
+          parseCurrentUserText(url, text);
         }
       })
       .catch(() => {});
@@ -498,15 +541,18 @@
         const url = this.__mealsharkUrl || this.responseURL || "";
         const isMenu = isMenuUrl(url);
         const isDiscount = isDiscountUrl(url);
+        const isCurrentUser = isCurrentUserUrl(url);
 
-        if ((!isMenu && !isDiscount) || typeof this.responseText !== "string") {
+        if ((!isMenu && !isDiscount && !isCurrentUser) || typeof this.responseText !== "string") {
           return;
         }
 
         if (isMenu) {
           parseMenuText(url, this.responseText);
-        } else {
+        } else if (isDiscount) {
           parseDiscountText(url, this.responseText);
+        } else {
+          parseCurrentUserText(url, this.responseText);
         }
       });
 
