@@ -1,0 +1,6 @@
+.playwright-mcp/console-*.log
+.playwright-mcp/page-*.yml
+mealpal-*-response.json
+mealpal-main.js
+menu-response.json
+mealshark-split-pane.png

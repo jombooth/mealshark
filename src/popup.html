@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mealshark</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header>
+        <p class="eyebrow">Mealshark</p>
+        <h1>MealPal tools</h1>
+      </header>
+
+      <section class="status-panel" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <div>
+          <p class="status-label">Current page</p>
+          <p id="page-status" class="status-value">Waiting for a MealPal tab</p>
+        </div>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
