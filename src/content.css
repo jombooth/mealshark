@@ -1,6 +1,7 @@
 html {
   --mealshark-split-width: 420px;
   --mealshark-bubble-size: 60px;
+  --mealshark-bubble-half-size: 30px;
   --mealshark-card-image-width: 148px;
 }
 
@@ -47,7 +48,7 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
   color: #111827;
   font: 14px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   pointer-events: none;
-  transition: width 180ms ease, height 180ms ease, right 180ms ease, bottom 180ms ease;
+  transition: width 180ms ease, height 180ms ease, right 180ms ease, top 180ms ease;
 }
 
 #mealshark-root * {
@@ -55,9 +56,9 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
 }
 
 #mealshark-root.mealshark-collapsed {
-  top: auto;
+  top: calc(50% - var(--mealshark-bubble-half-size));
   right: 20px;
-  bottom: 20px;
+  bottom: auto;
   width: var(--mealshark-bubble-size);
   height: var(--mealshark-bubble-size);
   overflow: visible;
@@ -529,8 +530,9 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
   }
 
   #mealshark-root.mealshark-collapsed {
+    top: calc(50% - var(--mealshark-bubble-half-size));
     right: 16px;
-    bottom: 16px;
+    bottom: auto;
     width: var(--mealshark-bubble-size);
     height: var(--mealshark-bubble-size);
   }
