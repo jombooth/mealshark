@@ -3,6 +3,7 @@
   const PAGE_SOURCE = "mealshark-page-hook";
   const REQUEST_LATEST = "mealshark-request-latest-menu";
   const MAP_ACTION = "mealshark-map-action";
+  const CREDIT_FILTER_TYPE = "mealshark-credit-filter";
 
   if (window[INSTALLED_KEY]) {
     return;
@@ -16,6 +17,8 @@
   let latestDiscounts = new Map();
   let latestCreditUnitPrice = null;
   const latestCreditUnitPrices = new Map();
+  let latestCreditFilter = null;
+  let latestCreditFilterSignature = "";
   let mapActionToken = 0;
 
   const HOVER_LAYER_IDS = [
@@ -32,6 +35,9 @@
     "standard-hover",
     "standard-hover-sold-out"
   ];
+
+  const CREDIT_FILTER_MIN = 1;
+  const CREDIT_FILTER_MAX = 14;
 
   function resolveUrl(input) {
     if (typeof input === "string") {
@@ -145,6 +151,14 @@
 
   function safeString(value) {
     return typeof value === "string" ? value.trim() : "";
+  }
+
+  function normalizeLookupText(value) {
+    return safeString(value)
+      .toLowerCase()
+      .replace(/&/g, "and")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
   }
 
   function normalizeCoordinates(value) {
@@ -387,6 +401,161 @@
     return controller.restaurants.find((restaurant) => restaurant?.id === restaurantId) || null;
   }
 
+  function createCreditFilter(source = "") {
+    return {
+      capturedAt: new Date().toISOString(),
+      source,
+      creditMin: null,
+      creditMax: null
+    };
+  }
+
+  function setCreditRangeFromValues(filter, values) {
+    const creditValues = values.filter((value) => value !== null && value >= CREDIT_FILTER_MIN && value <= CREDIT_FILTER_MAX);
+
+    if (creditValues.length >= 2) {
+      filter.creditMin = Math.min(...creditValues);
+      filter.creditMax = Math.max(...creditValues);
+    } else if (creditValues.length === 1) {
+      filter.creditMin = CREDIT_FILTER_MIN;
+      filter.creditMax = creditValues[0];
+    }
+  }
+
+  function getElementText(element) {
+    if (!element) {
+      return "";
+    }
+
+    const label = element.closest("label");
+    const textParts = [
+      element.getAttribute("aria-label"),
+      element.getAttribute("placeholder"),
+      element.getAttribute("name"),
+      element.textContent,
+      label && label !== element ? label.textContent : ""
+    ];
+
+    return textParts.map(safeString).filter(Boolean).join(" ");
+  }
+
+  function getAncestorText(element, maxDepth = 4) {
+    const textParts = [];
+    let current = element;
+
+    for (let depth = 0; current && depth < maxDepth; depth += 1) {
+      textParts.push(getElementText(current));
+      current = current.parentElement;
+    }
+
+    return textParts.join(" ");
+  }
+
+  function getControlNumericValue(control) {
+    const rawValues = [
+      control.getAttribute("aria-valuenow"),
+      control.getAttribute("data-value"),
+      control.value
+    ];
+
+    for (const rawValue of rawValues) {
+      const value = toNumber(rawValue);
+
+      if (value !== null) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  function extractCreditFilterFromDom(source = "dom") {
+    const filter = createCreditFilter(source);
+    const creditValues = [];
+    const creditControls = document.querySelectorAll("input[type='range']");
+
+    for (const control of creditControls) {
+      if (control.closest("#mealshark-root") || !/credits?/.test(normalizeLookupText(getAncestorText(control)))) {
+        continue;
+      }
+
+      const value = getControlNumericValue(control);
+
+      if (value !== null) {
+        creditValues.push(value);
+      }
+    }
+
+    setCreditRangeFromValues(filter, creditValues);
+
+    return creditValues.length ? filter : null;
+  }
+
+  function getCreditFilterSignature(filter) {
+    return JSON.stringify({
+      creditMin: filter.creditMin,
+      creditMax: filter.creditMax
+    });
+  }
+
+  function getFallbackCreditFilter(source = "default") {
+    return {
+      ...(latestCreditFilter || createCreditFilter(source)),
+      capturedAt: new Date().toISOString(),
+      source
+    };
+  }
+
+  function postCreditFilter(filter = getFallbackCreditFilter("default"), force = false) {
+    const creditFilter = filter;
+    const signature = getCreditFilterSignature(creditFilter);
+
+    if (!force && signature === latestCreditFilterSignature) {
+      return;
+    }
+
+    latestCreditFilter = creditFilter;
+    latestCreditFilterSignature = signature;
+    window.postMessage(
+      {
+        source: PAGE_SOURCE,
+        type: CREDIT_FILTER_TYPE,
+        payload: creditFilter
+      },
+      window.location.origin
+    );
+  }
+
+  function getInteractiveEventElement(target) {
+    const element =
+      target instanceof Element ? target : target?.parentElement instanceof Element ? target.parentElement : null;
+
+    return element?.closest?.("button,[role='button']") || null;
+  }
+
+  function handleCreditFilterEvent(event) {
+    const element = getInteractiveEventElement(event.target);
+
+    if (!element || element.closest("#mealshark-root")) {
+      return;
+    }
+
+    const elementText = normalizeLookupText(getElementText(element));
+
+    if (event.type === "click" && /\b(reset all|reset|clear all)\b/.test(elementText)) {
+      postCreditFilter(createCreditFilter("reset"), true);
+      return;
+    }
+
+    if (event.type === "click" && /\bapply\b/.test(elementText)) {
+      postCreditFilter(extractCreditFilterFromDom("apply") || createCreditFilter("apply"), true);
+    }
+  }
+
+  function startCreditFilterListeners() {
+    document.addEventListener("click", handleCreditFilterEvent, true);
+  }
+
   function getActionCoordinates(payload, restaurant) {
     return normalizeCoordinates(payload?.coordinates) || normalizeCoordinates(restaurant?.coordinates);
   }
@@ -561,6 +730,7 @@
       latestMenuBody = JSON.parse(text);
       latestMenuUrl = url;
       postLatestMenu();
+      postCreditFilter(undefined, true);
     } catch (_error) {
       // Ignore non-JSON or malformed responses. The original page request is untouched.
     }
@@ -698,10 +868,13 @@
         },
         window.location.origin
       );
+      postCreditFilter(undefined, true);
     }
 
     if (event.data?.source === "mealshark-content" && event.data?.type === MAP_ACTION) {
       handleMapAction(event.data.payload);
     }
   });
+
+  startCreditFilterListeners();
 })();

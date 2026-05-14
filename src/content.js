@@ -8,8 +8,11 @@
   const PAGE_SOURCE = "mealshark-page-hook";
   const REQUEST_LATEST = "mealshark-request-latest-menu";
   const MAP_ACTION = "mealshark-map-action";
+  const CREDIT_FILTER_TYPE = "mealshark-credit-filter";
   const APP_TILE_ANNOTATED_CLASS = "mealshark-app-tile-annotated";
   const APP_TILE_PRICE_CLASS = "mealshark-app-price-line";
+  const CREDIT_FILTER_MIN = 1;
+  const CREDIT_FILTER_MAX = 14;
   const SORT_MODES = {
     DISCOUNT: "discount",
     CREDIT_DESC: "credit-desc",
@@ -24,6 +27,7 @@
     capturedAt: "",
     cityName: "",
     creditUnitPrice: null,
+    mealPalCreditFilter: null,
     topN: 50,
     newOnly: false,
     sortMode: SORT_MODES.DISCOUNT,
@@ -43,12 +47,53 @@
     };
   }
 
+  function getStorageLocal() {
+    try {
+      return chrome?.storage?.local || null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  async function storageGet(key) {
+    const storage = getStorageLocal();
+
+    if (!storage) {
+      return {};
+    }
+
+    try {
+      const result = storage.get(key);
+      return typeof result?.then === "function" ? await result : result || {};
+    } catch (_error) {
+      return {};
+    }
+  }
+
+  function storageSet(value) {
+    const storage = getStorageLocal();
+
+    if (!storage) {
+      return;
+    }
+
+    try {
+      const result = storage.set(value);
+
+      if (typeof result?.catch === "function") {
+        result.catch(() => {});
+      }
+    } catch (_error) {
+      // The content script can outlive its extension context after reloads.
+    }
+  }
+
   function savePageSnapshot() {
-    chrome.storage.local.set({ [STATE_KEY]: getPageSnapshot() });
+    storageSet({ [STATE_KEY]: getPageSnapshot() });
   }
 
   async function loadSettings() {
-    const result = await chrome.storage.local.get(SETTINGS_KEY);
+    const result = await storageGet(SETTINGS_KEY);
     const settings = result[SETTINGS_KEY] || {};
     const hasCurrentSettings = settings.version === SETTINGS_VERSION;
 
@@ -59,7 +104,7 @@
   }
 
   function saveSettings() {
-    chrome.storage.local.set({
+    storageSet({
       [SETTINGS_KEY]: {
         version: SETTINGS_VERSION,
         collapsed: state.collapsed,
@@ -81,7 +126,7 @@
       return 50;
     }
 
-    return Math.min(Math.max(nextValue, 1), 100);
+    return Math.max(nextValue, 1);
   }
 
   function ready(callback) {
@@ -153,6 +198,50 @@
     return index;
   }
 
+  function normalizeMealPalCreditFilter(payload) {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    const creditMin = toFiniteNumber(payload.creditMin);
+    const creditMax = toFiniteNumber(payload.creditMax);
+
+    return {
+      capturedAt: safeString(payload.capturedAt),
+      source: safeString(payload.source),
+      creditMin,
+      creditMax
+    };
+  }
+
+  function hasActiveMealPalCreditFilter(filters) {
+    return Boolean(filters) &&
+      (
+        (filters.creditMin !== null && filters.creditMin > CREDIT_FILTER_MIN) ||
+        (filters.creditMax !== null && filters.creditMax < CREDIT_FILTER_MAX)
+      );
+  }
+
+  function mealMatchesMealPalCreditFilter(meal, filters) {
+    if (!hasActiveMealPalCreditFilter(filters)) {
+      return true;
+    }
+
+    const min = filters.creditMin;
+    const max = filters.creditMax;
+    const creditPrice = toFiniteNumber(meal.mealCreditPrice);
+
+    if (creditPrice === null) {
+      return false;
+    }
+
+    return (min === null || creditPrice >= min) && (max === null || creditPrice <= max);
+  }
+
+  function getMealPalCreditFilteredMeals() {
+    return state.meals.filter((meal) => mealMatchesMealPalCreditFilter(meal, state.mealPalCreditFilter));
+  }
+
   function ensureRoot() {
     const existingRoot = document.getElementById(ROOT_ID);
 
@@ -220,16 +309,15 @@
 
     const controls = createElement("div", "mealshark-controls");
     const topLabel = createElement("label", "mealshark-top-label");
-    const topLabelStart = createElement("span", null, "Display");
+    const topLabelStart = createElement("span", null, "Display up to");
     dom.topNInput = createElement("input", "mealshark-top-input");
     dom.topNInput.type = "number";
     dom.topNInput.min = "1";
-    dom.topNInput.max = "100";
     dom.topNInput.step = "1";
     dom.topNInput.value = String(state.topN);
     dom.topNInput.setAttribute("aria-label", "Number of results to display");
-    const topLabelEnd = createElement("span", null, "results");
-    topLabel.append(topLabelStart, dom.topNInput, topLabelEnd);
+    dom.topNResultText = createElement("span", null, "of 0 results");
+    topLabel.append(topLabelStart, dom.topNInput, dom.topNResultText);
 
     const filterLabel = createElement("label", "mealshark-filter-toggle");
     dom.newOnlyInput = createElement("input");
@@ -333,6 +421,10 @@
       return;
     }
 
+    if (payload.url && payload.url !== state.menuUrl) {
+      state.mealPalCreditFilter = null;
+    }
+
     state.meals = payload.meals;
     state.mealIndex = buildMealIndex(state.meals);
     state.menuUrl = payload.url || "";
@@ -341,6 +433,17 @@
     state.creditUnitPrice = toFiniteNumber(payload.creditUnitPrice);
     render();
     scheduleMealPalTileAnnotation();
+  }
+
+  function handleCreditFilterPayload(payload) {
+    const filter = normalizeMealPalCreditFilter(payload);
+
+    if (!filter) {
+      return;
+    }
+
+    state.mealPalCreditFilter = filter;
+    render();
   }
 
   function formatMetricCityName(cityName) {
@@ -688,14 +791,17 @@
     dom.bubble.setAttribute("aria-expanded", String(!state.collapsed));
     dom.panel.hidden = state.collapsed;
 
-    const newMeals = state.meals.filter((meal) => meal.isNew);
-    const listMeals = state.newOnly ? newMeals : state.meals;
+    const filteredMeals = getMealPalCreditFilteredMeals();
+    const totalNewMeals = state.meals.filter((meal) => meal.isNew);
+    const newMeals = filteredMeals.filter((meal) => meal.isNew);
+    const listMeals = state.newOnly ? newMeals : filteredMeals;
     const sortedMeals = sortMeals(listMeals).slice(0, state.topN);
 
     setMetric(dom.totalMealsMetric, String(state.meals.length), buildMetricLabel("Meals"));
-    setMetric(dom.newMealsMetric, String(newMeals.length), "New");
+    setMetric(dom.newMealsMetric, String(totalNewMeals.length), "New");
 
     dom.topNInput.value = String(state.topN);
+    dom.topNResultText.textContent = `of ${listMeals.length} ${listMeals.length === 1 ? "result" : "results"}`;
     dom.newOnlyInput.checked = state.newOnly;
     dom.emptyState.hidden = state.meals.length > 0;
 
@@ -720,11 +826,13 @@
     dom.creditDirectionButton.title =
       state.sortMode === SORT_MODES.CREDIT_DESC ? "Most credits first" : "Least credits first";
 
-    renderMealList(
-      dom.mealList,
-      sortedMeals,
-      state.newOnly ? "No new meals in the captured menu." : "No discount data in the captured menu."
-    );
+    const emptyMessage = !state.meals.length
+      ? "No discount data in the captured menu."
+      : state.newOnly
+        ? "No new meals match the current credit range."
+        : "No meals match the current credit range.";
+
+    renderMealList(dom.mealList, sortedMeals, emptyMessage);
   }
 
   function renderMealList(container, meals, emptyMessage) {
@@ -836,6 +944,7 @@
     }
 
     currentHref = window.location.href;
+    state.mealPalCreditFilter = null;
     savePageSnapshot();
     render();
 
@@ -858,6 +967,10 @@
 
     if (event.data.type === "mealshark-menu") {
       handleMenuPayload(event.data.payload);
+    }
+
+    if (event.data.type === CREDIT_FILTER_TYPE) {
+      handleCreditFilterPayload(event.data.payload);
     }
   });
 
