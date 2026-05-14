@@ -1,23 +1,23 @@
 {
   "manifest_version": 3,
   "name": "Mealshark",
-  "description": "A Chrome extension layer for mealpal.com.",
+  "description": "The Mealshark extension finds the best deals on MealPal! Easily discover new meals as they're added, sort by % off, and see what you're actually paying for each meal.",
   "version": "0.1.0",
   "action": {
     "default_title": "Mealshark",
     "default_popup": "src/popup.html"
   },
-  "permissions": ["activeTab", "storage"],
-  "host_permissions": ["https://mealpal.com/*", "https://*.mealpal.com/*"],
+  "permissions": ["storage"],
+  "host_permissions": ["https://secure.mealpal.com/*"],
   "content_scripts": [
     {
-      "matches": ["https://mealpal.com/*", "https://*.mealpal.com/*"],
+      "matches": ["https://secure.mealpal.com/*"],
       "js": ["src/page-hook.js"],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["https://mealpal.com/*", "https://*.mealpal.com/*"],
+      "matches": ["https://secure.mealpal.com/*"],
       "js": ["src/content.js"],
       "css": ["src/content.css"],
       "run_at": "document_start"
