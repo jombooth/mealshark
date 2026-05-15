@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mealshark",
-  "description": "The Mealshark extension finds the best deals on MealPal! Easily discover new meals as they're added, sort by % off, and see what you're actually paying for each meal.",
+  "description": "Mealshark finds the best deals on MealPal! Discover newly added meals, sort by % off, and see what you're paying for each meal.",
   "version": "0.1.0",
   "icons": {
     "16": "assets/icons/icon-16.png",

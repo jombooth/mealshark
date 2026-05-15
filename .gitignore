@@ -1,5 +1,7 @@
-.playwright-mcp/console-*.log
-.playwright-mcp/page-*.yml
+.playwright-mcp/
+__pycache__/
+*.pyc
+dist/
 mealpal-*-response.json
 mealpal-main.js
 menu-response.json

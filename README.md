@@ -1,30 +1,64 @@
 # Mealshark
 
-Mealshark is a Chrome extension scaffold for adding MealPal-specific browser features on `mealpal.com`.
+Mealshark is a Chrome extension that adds meal comparison tools to MealPal.
+It runs on authenticated MealPal lunch and dinner pages and helps compare
+available meals by discount, credit value, newly added status, estimated plan
+cost, retail price, and map location.
 
-## Current Feature
+Mealshark is independent and is not affiliated with, endorsed by, or sponsored
+by MealPal.
 
-On MealPal menu pages, Mealshark adds a collapsible right-side panel that:
+## Features
 
-- Captures the logged-in `/menu` API response as the page loads.
-- Lists meals labeled **New!** by MealPal.
-- Shows the top N meals sorted by discount percentage from greatest to least.
+- Adds a Mealshark panel on MealPal `/lunch` and `/dinner` pages.
+- Filter for newly added meals.
+- Sorts meals by best discount.
+- Sorts meals by best discount given credit value, with credit value ascending and descending.
+- Shows meal pricing information transparently in USD.
+- Respects MealPal's credit filter when the MealPal filter is set.
+- Highlights and opens restaurants on the MealPal map when Mealshark cards are hovered or clicked.
 
-## Load In Chrome
+## Development
 
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
 4. Select this repository directory.
+5. After editing extension files, reload the extension from `chrome://extensions`
+   and refresh the MealPal tab.
 
 ## Project Structure
 
 - `manifest.json` configures the Manifest V3 extension.
 - `src/page-hook.js` runs in the page context and captures MealPal menu responses.
-- `src/content.js` runs on MealPal pages.
+- `src/content.js` runs on MealPal pages and renders the Mealshark UI.
 - `src/content.css` styles the in-page extension UI.
 - `src/popup.html`, `src/popup.css`, and `src/popup.js` power the toolbar popup.
+- `assets/icons/` contains packaged extension icons.
+- `assets/store/` contains Chrome Web Store listing images and screenshots.
+- `docs/` contains implementation notes and release runbooks.
+- `PRIVACY.md` is the public privacy policy for the Chrome Web Store listing.
 
-## Development Notes
+## Build
 
-After editing files, reload the extension from `chrome://extensions` and refresh the MealPal tab. The page refresh is required because the menu response is captured when MealPal makes the network request.
+Build the Chrome Web Store upload zip with:
+
+```bash
+python3 scripts/build-extension-zip.py
+```
+
+The script writes:
+
+```text
+dist/mealshark-<version>.zip
+```
+
+Only runtime extension files are included in the zip: `manifest.json`, `src/`,
+and `assets/icons/`. Store listing assets, source images, docs, screenshots,
+and repository metadata are intentionally excluded.
+
+## Release Notes
+
+- Pricing-field findings are documented in `docs/PRICING.md`.
+- The privacy policy should be available at an HTTPS URL, such as the public
+  GitHub URL for `PRIVACY.md`, before submitting to the Chrome Web Store.
