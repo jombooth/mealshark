@@ -569,13 +569,20 @@
     }
 
     const point = map.project([coordinates.longitude, coordinates.latitude]);
+    const rect = container.getBoundingClientRect();
     const margin = 32;
+    const visibleLeft = Math.max(rect.left, 0) + margin;
+    const visibleTop = Math.max(rect.top, 0) + margin;
+    const visibleRight = Math.min(rect.right, window.innerWidth) - margin;
+    const visibleBottom = Math.min(rect.bottom, window.innerHeight) - margin;
+    const viewportX = rect.left + point.x;
+    const viewportY = rect.top + point.y;
 
     return (
-      point.x >= margin &&
-      point.y >= margin &&
-      point.x <= container.clientWidth - margin &&
-      point.y <= container.clientHeight - margin
+      viewportX >= visibleLeft &&
+      viewportY >= visibleTop &&
+      viewportX <= visibleRight &&
+      viewportY <= visibleBottom
     );
   }
 
@@ -606,6 +613,147 @@
     });
   }
 
+  function findRawRestaurantForPayload(payload) {
+    const restaurants = Array.isArray(latestMenuBody?.restaurants) ? latestMenuBody.restaurants : [];
+    const restaurantId = safeString(payload?.restaurantId);
+    const scheduleId = safeString(payload?.scheduleId);
+    const mealId = safeString(payload?.mealId);
+
+    for (const restaurant of restaurants) {
+      const schedules = Array.isArray(restaurant?.schedules) ? restaurant.schedules : [];
+
+      if (restaurantId && restaurant?.id === restaurantId) {
+        return { restaurant, schedules };
+      }
+
+      const matchingSchedules = schedules.filter((schedule) => {
+        return (
+          (scheduleId && schedule?.id === scheduleId) ||
+          (mealId && schedule?.meal?.id === mealId)
+        );
+      });
+
+      if (matchingSchedules.length) {
+        return { restaurant, schedules: matchingSchedules };
+      }
+    }
+
+    return null;
+  }
+
+  function createModelLike(sample, values) {
+    return Object.assign(sample ? Object.create(Object.getPrototypeOf(sample)) : {}, values);
+  }
+
+  function normalizePopupMeal(rawMeal, sampleMeal) {
+    return createModelLike(sampleMeal, {
+      id: safeString(rawMeal?.id),
+      name: safeString(rawMeal?.name),
+      imageUrl: safeString(rawMeal?.image),
+      cuisine: safeString(rawMeal?.cuisine),
+      description: safeString(rawMeal?.description),
+      vegetarian: rawMeal?.veg === true,
+      healthy: rawMeal?.healthy === true,
+      healthySubtext: safeString(rawMeal?.healthy_subtext),
+      retailPriceDisplayString: safeString(rawMeal?.retail_price_display_string),
+      mealGroup: safeString(rawMeal?.meal_group),
+      portionSizeKey: safeString(rawMeal?.portion_size_key)
+    });
+  }
+
+  function normalizePopupSchedule(rawSchedule, rawRestaurant, sampleSchedule) {
+    const rawMeal = rawSchedule?.meal || {};
+    const sampleMeal = sampleSchedule?.meal || null;
+    const discount = latestDiscounts.get(rawSchedule?.id) || latestDiscounts.get(rawMeal?.id);
+    const schedule = createModelLike(sampleSchedule, {
+      id: safeString(rawSchedule?.id),
+      meal: normalizePopupMeal(rawMeal, sampleMeal),
+      amount: toNumber(rawSchedule?.amount) ?? 100,
+      discountPercentageMarkdown: safeString(discount?.markdown),
+      mealCreditPrice: toNumber(rawSchedule?.meal_credit_price),
+      halfMealCreditPrice: toNumber(rawSchedule?.half_meal_credit_price),
+      priority: toNumber(rawSchedule?.priority) ?? 100,
+      restaurantId: safeString(rawRestaurant?.id),
+      extendedKitchenMealCreditPrice: toNumber(rawSchedule?.extended_kitchen_meal_credit_price),
+      classicKitchenSavingsMealCreditPrice: toNumber(rawSchedule?.classic_kitchen_savings_meal_credit_price),
+      extendedKitchenHalfMealCreditPrice: toNumber(rawSchedule?.extended_kitchen_half_meal_credit_price),
+      classicKitchenSavingsHalfMealCreditPrice: toNumber(rawSchedule?.classic_kitchen_savings_half_meal_credit_price),
+      mpDiscountPercentage: toNumber(rawSchedule?.mp_discount_percentage),
+      mealRecommendation: rawSchedule?.meal_recommendation || null,
+      packaging: rawSchedule?.packaging || null,
+      coworkers: []
+    });
+
+    [
+      "dryTestPackaging",
+      "greenPackaging",
+      "isRecommended",
+      "isSoldOut",
+      "packagingAvailableAfterTenThirty",
+      "reusableOrReusableDryTestPackaging",
+      "singleUseOrReusableOptionsAvailable",
+      "singleUseOrReusableOptionsAvailableWithoutDryTest"
+    ].forEach((methodName) => {
+      if (typeof schedule[methodName] !== "function") {
+        schedule[methodName] = () => false;
+      }
+    });
+
+    return schedule;
+  }
+
+  function createFallbackPopupRestaurant(controller, payload) {
+    const rawMatch = findRawRestaurantForPayload(payload);
+    const rawRestaurant = rawMatch?.restaurant;
+    const rawSchedules = rawMatch?.schedules || [];
+    const sampleRestaurant = Array.isArray(controller?.restaurants) ? controller.restaurants[0] : null;
+    const sampleSchedule = sampleRestaurant?.schedules?.[0] || null;
+    const scheduleId = safeString(payload?.scheduleId);
+    const mealId = safeString(payload?.mealId);
+    const schedules = rawSchedules.filter((schedule) => {
+      return (
+        (!scheduleId && !mealId) ||
+        (scheduleId && schedule?.id === scheduleId) ||
+        (mealId && schedule?.meal?.id === mealId)
+      );
+    });
+    const kitchenTime = Array.isArray(rawRestaurant?.kitchen_times) ? rawRestaurant.kitchen_times[0] : null;
+
+    if (!rawRestaurant || !schedules.length) {
+      return null;
+    }
+
+    return createModelLike(sampleRestaurant, {
+      id: safeString(rawRestaurant?.id),
+      name: safeString(rawRestaurant?.name),
+      address: safeString(rawRestaurant?.address),
+      fullAddress: safeString(rawRestaurant?.full_address),
+      city: latestMenuBody?.city || null,
+      coordinates: normalizeCoordinates(rawRestaurant?.coordinates),
+      kitchenOpen: safeString(kitchenTime?.open),
+      kitchenClose: safeString(kitchenTime?.close),
+      mealCreditDiscount: toNumber(rawRestaurant?.meal_credit_discount),
+      pickUpInstructions: safeString(rawRestaurant?.pick_up_instructions),
+      priority: toNumber(rawRestaurant?.priority),
+      schedules: schedules.map((schedule) => normalizePopupSchedule(schedule, rawRestaurant, sampleSchedule))
+    });
+  }
+
+  function openFallbackPopup(controller, payload) {
+    const restaurant = createFallbackPopupRestaurant(controller, payload);
+
+    if (!restaurant?.coordinates) {
+      return false;
+    }
+
+    try {
+      controller.createPopup(restaurant);
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   function highlightRestaurantWithRetry(restaurantId, token, attempt = 0) {
     const controller = findMapController();
 
@@ -623,7 +771,7 @@
     }
   }
 
-  function createPopupWhenReady(restaurantId, token, attempt = 0) {
+  function createPopupWhenReady(restaurantId, token, payload, attempt = 0) {
     const controller = findMapController();
     const restaurant = findRestaurant(controller, restaurantId);
 
@@ -638,9 +786,12 @@
 
     if (attempt < 8) {
       window.setTimeout(() => {
-        createPopupWhenReady(restaurantId, token, attempt + 1);
+        createPopupWhenReady(restaurantId, token, payload, attempt + 1);
       }, 125);
+      return;
     }
+
+    openFallbackPopup(controller, payload);
   }
 
   function handleMapAction(payload) {
@@ -679,8 +830,10 @@
 
       if (!moved && restaurant?.coordinates) {
         controller.createPopup(restaurant);
+      } else if (!moved && openFallbackPopup(controller, payload)) {
+        return;
       } else {
-        createPopupWhenReady(restaurantId, token);
+        createPopupWhenReady(restaurantId, token, payload);
       }
     }
   }
