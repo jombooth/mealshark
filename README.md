@@ -2,10 +2,10 @@
 
 # Mealshark
 
-Mealshark is a Chrome extension that adds meal comparison tools to MealPal.
-It runs on authenticated MealPal lunch and dinner pages and helps compare
-available meals by discount, credit value, newly added status, estimated plan
-cost, retail price, and map location.
+Mealshark is a Chrome extension that adds meal discovery tools to MealPal.
+It runs on MealPal lunch and dinner pages and helps compare available meals
+by discount, credit value, newly added status, and prices (retail and
+actual, in USD).
 
 Mealshark is independent and is not affiliated with, endorsed by, or sponsored
 by MealPal.
@@ -69,9 +69,3 @@ dist/mealshark-<version>.zip
 Only runtime extension files are included in the zip: `manifest.json`, `src/`,
 and `assets/icons/`. Store listing assets, source images, docs, screenshots,
 and repository metadata are intentionally excluded.
-
-## Release Notes
-
-- Pricing-field findings are documented in `docs/PRICING.md`.
-- The privacy policy should be available at an HTTPS URL, such as the public
-  GitHub URL for `PRIVACY.md`, before submitting to the Chrome Web Store.
