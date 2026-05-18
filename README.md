@@ -1,3 +1,5 @@
+![Mealshark](assets/store/marquee-1400x560.png)
+
 # Mealshark
 
 Mealshark is a Chrome extension that adds meal comparison tools to MealPal.
@@ -17,6 +19,17 @@ by MealPal.
 - Shows meal pricing information transparently in USD.
 - Respects MealPal's credit filter when the MealPal filter is set.
 - Highlights and opens restaurants on the MealPal map when Mealshark cards are hovered or clicked.
+
+## Gallery
+
+| | |
+| --- | --- |
+| ![Mealshark newly added meals view](assets/store/screenshots/new-only-large.png) | Filter for new meals only |
+| ![Best discounts across all meals](assets/store/screenshots/best-discount-all.png) | Best discounts across all meals |
+| ![Best discounts for credits, high to low](assets/store/screenshots/best-discount-for-credits-high-to-low.png) | Best discounts for a given number of credits, high to low |
+| ![Best discounts with a credit limit](assets/store/screenshots/best-discount-limit-credits.png) | Best discounts up to a credit limit |
+| ![Best discounts for credits, new only](assets/store/screenshots/best-discount-for-credits-new-only.png) | Best discounts for given number of credits, new only |
+| ![Transparent prices on MealPal cards](assets/store/screenshots/transparent-prices.png) | Transparent prices on MealPal cards |
 
 ## Development
 
