@@ -17,7 +17,7 @@ by MealPal.
 - Sorts meals by best discount.
 - Sorts meals by best discount given credit value, with credit value ascending and descending.
 - Shows meal pricing information transparently in USD.
-- Respects MealPal's credit filter when the MealPal filter is set.
+- Respects MealPal's native filters when set: credit range, vegetarian, cuisine, favorites, and text search.
 - Highlights and opens restaurants on the MealPal map when Mealshark cards are hovered or clicked.
 
 ## Gallery

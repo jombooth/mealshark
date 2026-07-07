@@ -3,7 +3,8 @@
   const PAGE_SOURCE = "mealshark-page-hook";
   const REQUEST_LATEST = "mealshark-request-latest-menu";
   const MAP_ACTION = "mealshark-map-action";
-  const CREDIT_FILTER_TYPE = "mealshark-credit-filter";
+  const NATIVE_FILTER_TYPE = "mealshark-native-filter";
+  const FAVORITES_TYPE = "mealshark-favorites";
 
   if (window[INSTALLED_KEY]) {
     return;
@@ -17,8 +18,10 @@
   let latestDiscounts = new Map();
   let latestCreditUnitPrice = null;
   const latestCreditUnitPrices = new Map();
-  let latestCreditFilter = null;
-  let latestCreditFilterSignature = "";
+  let latestNativeFilter = null;
+  let latestNativeFilterSignature = "";
+  let latestFavoriteRestaurants = null;
+  let searchInputDebounce = 0;
   let mapActionToken = 0;
 
   const HOVER_LAYER_IDS = [
@@ -86,6 +89,19 @@
       const parsedUrl = new URL(url, window.location.href);
 
       return parsedUrl.hostname.endsWith("mealpal.com") && parsedUrl.pathname === "/1/functions/getCurrentUser";
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function isFavoritesFunctionUrl(url) {
+    try {
+      const parsedUrl = new URL(url, window.location.href);
+
+      return (
+        parsedUrl.hostname.endsWith("mealpal.com") &&
+        /^\/1\/functions\/(updateFavoriteRestaurants|removeRestaurantFromFavorites)$/.test(parsedUrl.pathname)
+      );
     } catch (_error) {
       return false;
     }
@@ -194,6 +210,7 @@
           coordinates: normalizeCoordinates(restaurant?.coordinates),
           neighborhood: safeString(restaurant?.neighborhood),
           cuisine: safeString(meal?.cuisine),
+          veg: meal?.veg === true,
           description: safeString(meal?.description),
           imageUrl: safeString(meal?.image),
           isNew: schedule?.is_featured === true,
@@ -401,12 +418,30 @@
     return controller.restaurants.find((restaurant) => restaurant?.id === restaurantId) || null;
   }
 
-  function createCreditFilter(source = "") {
+  function findMealPalSearchInput() {
+    return (
+      Array.from(document.querySelectorAll("input[type='text'], input[type='search'], input:not([type])")).find(
+        (input) =>
+          !input.closest("#mealshark-root") &&
+          /search/i.test(`${input.getAttribute("placeholder") || ""} ${input.getAttribute("aria-label") || ""}`)
+      ) || null
+    );
+  }
+
+  function getLiveSearchText() {
+    return safeString(findMealPalSearchInput()?.value);
+  }
+
+  function createNativeFilter(source = "") {
     return {
       capturedAt: new Date().toISOString(),
       source,
       creditMin: null,
-      creditMax: null
+      creditMax: null,
+      vegetarianOnly: false,
+      cuisines: null,
+      favoritesOnly: false,
+      searchText: getLiveSearchText()
     };
   }
 
@@ -469,12 +504,12 @@
     return null;
   }
 
-  function extractCreditFilterFromDom(source = "dom") {
-    const filter = createCreditFilter(source);
+  function extractNativeFilterFromDom(source = "dom") {
+    const filter = createNativeFilter(source);
     const creditValues = [];
-    const creditControls = document.querySelectorAll("input[type='range']");
+    let sawControls = false;
 
-    for (const control of creditControls) {
+    for (const control of document.querySelectorAll("input[type='range']")) {
       if (control.closest("#mealshark-root") || !/credits?/.test(normalizeLookupText(getAncestorText(control)))) {
         continue;
       }
@@ -483,47 +518,118 @@
 
       if (value !== null) {
         creditValues.push(value);
+        sawControls = true;
       }
     }
 
     setCreditRangeFromValues(filter, creditValues);
 
-    return creditValues.length ? filter : null;
+    // The MealPal filter bar renders plain checkboxes whose value attributes
+    // name what they filter: "vegetarian", "favorite", or a cuisine bucket.
+    const checkedCuisines = [];
+    let sawUncheckedCuisine = false;
+
+    for (const control of document.querySelectorAll("input[type='checkbox']")) {
+      const value = normalizeLookupText(control.value);
+
+      if (control.closest("#mealshark-root") || !value || value === "on") {
+        continue;
+      }
+
+      sawControls = true;
+
+      if (value === "vegetarian") {
+        filter.vegetarianOnly = control.checked;
+      } else if (value === "favorite" || value === "favorites") {
+        filter.favoritesOnly = control.checked;
+      } else if (control.checked) {
+        checkedCuisines.push(value);
+      } else {
+        sawUncheckedCuisine = true;
+      }
+    }
+
+    if (sawUncheckedCuisine) {
+      filter.cuisines = checkedCuisines;
+    }
+
+    return sawControls ? filter : null;
   }
 
-  function getCreditFilterSignature(filter) {
+  function getNativeFilterSignature(filter) {
     return JSON.stringify({
       creditMin: filter.creditMin,
-      creditMax: filter.creditMax
+      creditMax: filter.creditMax,
+      vegetarianOnly: filter.vegetarianOnly,
+      cuisines: filter.cuisines,
+      favoritesOnly: filter.favoritesOnly,
+      searchText: filter.searchText
     });
   }
 
-  function getFallbackCreditFilter(source = "default") {
+  function getFallbackNativeFilter(source = "default") {
     return {
-      ...(latestCreditFilter || createCreditFilter(source)),
+      ...createNativeFilter(source),
+      ...(latestNativeFilter || {}),
       capturedAt: new Date().toISOString(),
-      source
+      source,
+      searchText: getLiveSearchText()
     };
   }
 
-  function postCreditFilter(filter = getFallbackCreditFilter("default"), force = false) {
-    const creditFilter = filter;
-    const signature = getCreditFilterSignature(creditFilter);
+  function postNativeFilter(filter = getFallbackNativeFilter("default"), force = false) {
+    const nativeFilter = filter;
+    const signature = getNativeFilterSignature(nativeFilter);
 
-    if (!force && signature === latestCreditFilterSignature) {
+    if (!force && signature === latestNativeFilterSignature) {
       return;
     }
 
-    latestCreditFilter = creditFilter;
-    latestCreditFilterSignature = signature;
+    latestNativeFilter = nativeFilter;
+    latestNativeFilterSignature = signature;
     window.postMessage(
       {
         source: PAGE_SOURCE,
-        type: CREDIT_FILTER_TYPE,
-        payload: creditFilter
+        type: NATIVE_FILTER_TYPE,
+        payload: nativeFilter
       },
       window.location.origin
     );
+  }
+
+  function postFavorites() {
+    if (!Array.isArray(latestFavoriteRestaurants)) {
+      return;
+    }
+
+    window.postMessage(
+      {
+        source: PAGE_SOURCE,
+        type: FAVORITES_TYPE,
+        payload: {
+          capturedAt: new Date().toISOString(),
+          restaurantIds: latestFavoriteRestaurants
+        }
+      },
+      window.location.origin
+    );
+  }
+
+  function updateFavoritesFromUserResult(result) {
+    if (!Array.isArray(result?.favoriteRestaurants)) {
+      return;
+    }
+
+    latestFavoriteRestaurants = result.favoriteRestaurants.map(safeString).filter(Boolean);
+    postFavorites();
+  }
+
+  function parseFavoritesText(_url, text) {
+    try {
+      updateFavoritesFromUserResult(JSON.parse(text)?.result);
+    } catch (_error) {
+      // Ignore non-JSON or unexpected response shapes.
+    }
   }
 
   function getInteractiveEventElement(target) {
@@ -533,7 +639,7 @@
     return element?.closest?.("button,[role='button']") || null;
   }
 
-  function handleCreditFilterEvent(event) {
+  function handleNativeFilterEvent(event) {
     const element = getInteractiveEventElement(event.target);
 
     if (!element || element.closest("#mealshark-root")) {
@@ -543,17 +649,35 @@
     const elementText = normalizeLookupText(getElementText(element));
 
     if (event.type === "click" && /\b(reset all|reset|clear all)\b/.test(elementText)) {
-      postCreditFilter(createCreditFilter("reset"), true);
+      postNativeFilter(createNativeFilter("reset"), true);
       return;
     }
 
     if (event.type === "click" && /\bapply\b/.test(elementText)) {
-      postCreditFilter(extractCreditFilterFromDom("apply") || createCreditFilter("apply"), true);
+      postNativeFilter(extractNativeFilterFromDom("apply") || createNativeFilter("apply"), true);
     }
   }
 
-  function startCreditFilterListeners() {
-    document.addEventListener("click", handleCreditFilterEvent, true);
+  function handleSearchInputEvent(event) {
+    const target = event.target;
+
+    if (!(target instanceof HTMLInputElement) || target.closest("#mealshark-root")) {
+      return;
+    }
+
+    if (!/search/i.test(`${target.getAttribute("placeholder") || ""} ${target.getAttribute("aria-label") || ""}`)) {
+      return;
+    }
+
+    window.clearTimeout(searchInputDebounce);
+    searchInputDebounce = window.setTimeout(() => {
+      postNativeFilter(getFallbackNativeFilter("search"));
+    }, 250);
+  }
+
+  function startNativeFilterListeners() {
+    document.addEventListener("click", handleNativeFilterEvent, true);
+    document.addEventListener("input", handleSearchInputEvent, true);
   }
 
   function getActionCoordinates(payload, restaurant) {
@@ -883,7 +1007,7 @@
       latestMenuBody = JSON.parse(text);
       latestMenuUrl = url;
       postLatestMenu();
-      postCreditFilter(undefined, true);
+      postNativeFilter(undefined, true);
     } catch (_error) {
       // Ignore non-JSON or malformed responses. The original page request is untouched.
     }
@@ -904,6 +1028,8 @@
       let updated = false;
 
       if (isCurrentUserUrl(_url)) {
+        updateFavoritesFromUserResult(body?.result);
+
         const prices = extractUserCreditUnitPrices(body);
 
         for (const [offering, price] of prices) {
@@ -940,9 +1066,10 @@
   function inspectFetchResponse(url, response) {
     const isMenu = isMenuUrl(url);
     const isDiscount = isDiscountUrl(url);
+    const isFavorites = isFavoritesFunctionUrl(url);
     const isCreditPricing = isCurrentUserUrl(url) || isProductOfferingUrl(url);
 
-    if (!isMenu && !isDiscount && !isCreditPricing) {
+    if (!isMenu && !isDiscount && !isFavorites && !isCreditPricing) {
       return;
     }
 
@@ -954,6 +1081,8 @@
           parseMenuText(url, text);
         } else if (isDiscount) {
           parseDiscountText(url, text);
+        } else if (isFavorites) {
+          parseFavoritesText(url, text);
         } else {
           parseCreditPricingText(url, text);
         }
@@ -988,9 +1117,10 @@
         const url = this.__mealsharkUrl || this.responseURL || "";
         const isMenu = isMenuUrl(url);
         const isDiscount = isDiscountUrl(url);
+        const isFavorites = isFavoritesFunctionUrl(url);
         const isCreditPricing = isCurrentUserUrl(url) || isProductOfferingUrl(url);
 
-        if ((!isMenu && !isDiscount && !isCreditPricing) || typeof this.responseText !== "string") {
+        if ((!isMenu && !isDiscount && !isFavorites && !isCreditPricing) || typeof this.responseText !== "string") {
           return;
         }
 
@@ -998,6 +1128,8 @@
           parseMenuText(url, this.responseText);
         } else if (isDiscount) {
           parseDiscountText(url, this.responseText);
+        } else if (isFavorites) {
+          parseFavoritesText(url, this.responseText);
         } else {
           parseCreditPricingText(url, this.responseText);
         }
@@ -1021,7 +1153,8 @@
         },
         window.location.origin
       );
-      postCreditFilter(undefined, true);
+      postNativeFilter(undefined, true);
+      postFavorites();
     }
 
     if (event.data?.source === "mealshark-content" && event.data?.type === MAP_ACTION) {
@@ -1029,5 +1162,5 @@
     }
   });
 
-  startCreditFilterListeners();
+  startNativeFilterListeners();
 })();

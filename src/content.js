@@ -8,7 +8,8 @@
   const PAGE_SOURCE = "mealshark-page-hook";
   const REQUEST_LATEST = "mealshark-request-latest-menu";
   const MAP_ACTION = "mealshark-map-action";
-  const CREDIT_FILTER_TYPE = "mealshark-credit-filter";
+  const NATIVE_FILTER_TYPE = "mealshark-native-filter";
+  const FAVORITES_TYPE = "mealshark-favorites";
   const APP_TILE_ANNOTATED_CLASS = "mealshark-app-tile-annotated";
   const APP_TILE_PRICE_CLASS = "mealshark-app-price-line";
   const CREDIT_FILTER_MIN = 1;
@@ -27,7 +28,8 @@
     capturedAt: "",
     cityName: "",
     creditUnitPrice: null,
-    mealPalCreditFilter: null,
+    mealPalFilter: null,
+    favoriteRestaurantIds: null,
     topN: 50,
     newOnly: false,
     sortMode: SORT_MODES.DISCOUNT,
@@ -198,19 +200,22 @@
     return index;
   }
 
-  function normalizeMealPalCreditFilter(payload) {
+  function normalizeMealPalFilter(payload) {
     if (!payload || typeof payload !== "object") {
       return null;
     }
 
-    const creditMin = toFiniteNumber(payload.creditMin);
-    const creditMax = toFiniteNumber(payload.creditMax);
-
     return {
       capturedAt: safeString(payload.capturedAt),
       source: safeString(payload.source),
-      creditMin,
-      creditMax
+      creditMin: toFiniteNumber(payload.creditMin),
+      creditMax: toFiniteNumber(payload.creditMax),
+      vegetarianOnly: payload.vegetarianOnly === true,
+      cuisines: Array.isArray(payload.cuisines)
+        ? payload.cuisines.map(normalizeLookupText).filter(Boolean)
+        : null,
+      favoritesOnly: payload.favoritesOnly === true,
+      searchText: safeString(payload.searchText).toLowerCase()
     };
   }
 
@@ -238,8 +243,41 @@
     return (min === null || creditPrice >= min) && (max === null || creditPrice <= max);
   }
 
-  function getMealPalCreditFilteredMeals() {
-    return state.meals.filter((meal) => mealMatchesMealPalCreditFilter(meal, state.mealPalCreditFilter));
+  function mealMatchesMealPalFilter(meal, filters) {
+    if (!filters) {
+      return true;
+    }
+
+    if (!mealMatchesMealPalCreditFilter(meal, filters)) {
+      return false;
+    }
+
+    if (filters.vegetarianOnly && meal.veg !== true) {
+      return false;
+    }
+
+    if (filters.cuisines !== null && !filters.cuisines.includes(normalizeLookupText(meal.cuisine))) {
+      return false;
+    }
+
+    // Fail open when the favorites list hasn't arrived yet.
+    if (filters.favoritesOnly && state.favoriteRestaurantIds && !state.favoriteRestaurantIds.has(meal.restaurantId)) {
+      return false;
+    }
+
+    if (filters.searchText) {
+      const haystack = `${getMealName(meal)} ${getRestaurantName(meal)} ${meal.description || ""}`.toLowerCase();
+
+      if (!haystack.includes(filters.searchText)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function getMealPalFilteredMeals() {
+    return state.meals.filter((meal) => mealMatchesMealPalFilter(meal, state.mealPalFilter));
   }
 
   function ensureRoot() {
@@ -422,7 +460,7 @@
     }
 
     if (payload.url && payload.url !== state.menuUrl) {
-      state.mealPalCreditFilter = null;
+      state.mealPalFilter = null;
     }
 
     state.meals = payload.meals;
@@ -435,14 +473,23 @@
     scheduleMealPalTileAnnotation();
   }
 
-  function handleCreditFilterPayload(payload) {
-    const filter = normalizeMealPalCreditFilter(payload);
+  function handleNativeFilterPayload(payload) {
+    const filter = normalizeMealPalFilter(payload);
 
     if (!filter) {
       return;
     }
 
-    state.mealPalCreditFilter = filter;
+    state.mealPalFilter = filter;
+    render();
+  }
+
+  function handleFavoritesPayload(payload) {
+    if (!payload || !Array.isArray(payload.restaurantIds)) {
+      return;
+    }
+
+    state.favoriteRestaurantIds = new Set(payload.restaurantIds.map(safeString).filter(Boolean));
     render();
   }
 
@@ -791,7 +838,7 @@
     dom.bubble.setAttribute("aria-expanded", String(!state.collapsed));
     dom.panel.hidden = state.collapsed;
 
-    const filteredMeals = getMealPalCreditFilteredMeals();
+    const filteredMeals = getMealPalFilteredMeals();
     const totalNewMeals = state.meals.filter((meal) => meal.isNew);
     const newMeals = filteredMeals.filter((meal) => meal.isNew);
     const listMeals = state.newOnly ? newMeals : filteredMeals;
@@ -829,8 +876,8 @@
     const emptyMessage = !state.meals.length
       ? "No discount data in the captured menu."
       : state.newOnly
-        ? "No new meals match the current credit range."
-        : "No meals match the current credit range.";
+        ? "No new meals match the current MealPal filters."
+        : "No meals match the current MealPal filters.";
 
     renderMealList(dom.mealList, sortedMeals, emptyMessage);
   }
@@ -944,7 +991,7 @@
     }
 
     currentHref = window.location.href;
-    state.mealPalCreditFilter = null;
+    state.mealPalFilter = null;
     savePageSnapshot();
     render();
 
@@ -969,8 +1016,12 @@
       handleMenuPayload(event.data.payload);
     }
 
-    if (event.data.type === CREDIT_FILTER_TYPE) {
-      handleCreditFilterPayload(event.data.payload);
+    if (event.data.type === NATIVE_FILTER_TYPE) {
+      handleNativeFilterPayload(event.data.payload);
+    }
+
+    if (event.data.type === FAVORITES_TYPE) {
+      handleFavoritesPayload(event.data.payload);
     }
   });
 
