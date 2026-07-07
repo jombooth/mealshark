@@ -35,6 +35,12 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
   max-width: calc(100% - var(--mealshark-split-width)) !important;
 }
 
+/* Meal detail modals are fixed to the viewport; keep them out from under the panel. */
+html.mealshark-page-open .ReactModal__Overlay {
+  width: calc(100% - var(--mealshark-split-width)) !important;
+  max-width: calc(100% - var(--mealshark-split-width)) !important;
+}
+
 #mealshark-root {
   position: fixed;
   top: 0;
@@ -509,7 +515,8 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
   html.mealshark-page-open body > #app,
   html.mealshark-page-open body > #root [class~="fixed"][class~="w-full"],
   html.mealshark-page-open body > #__next [class~="fixed"][class~="w-full"],
-  html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
+  html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"],
+  html.mealshark-page-open .ReactModal__Overlay {
     width: 100% !important;
     max-width: 100% !important;
   }
