@@ -114,7 +114,7 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
   top: 0;
   z-index: 1;
   display: flex;
-  align-items: start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 16px;
@@ -126,7 +126,6 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
   min-width: 0;
 }
 
-.mealshark-eyebrow,
 .mealshark-restaurant,
 .mealshark-meta,
 .mealshark-description,
@@ -135,18 +134,14 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
   margin: 0;
 }
 
-.mealshark-eyebrow {
-  color: #2563eb;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
 .mealshark-header h2 {
-  margin: 2px 0 0;
-  font-size: 18px;
-  line-height: 1.2;
+  margin: 0;
+  color: #2563eb;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 2px;
+  text-transform: uppercase;
 }
 
 .mealshark-close {
@@ -169,41 +164,26 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
   color: #0f172a;
 }
 
-.mealshark-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  padding: 12px 14px 0;
-}
-
-.mealshark-metric {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  min-width: 0;
-  padding: 10px;
+.mealshark-summary {
+  margin: 12px 14px 0;
+  padding: 10px 12px;
   border: 1px solid #dbe3ef;
   border-radius: 8px;
   background: #ffffff;
-  white-space: nowrap;
 }
 
-.mealshark-metric strong {
-  overflow: hidden;
-  flex: 0 0 auto;
-  font-size: 16px;
-  line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.mealshark-summary-title {
+  margin: 0 0 2px;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.mealshark-metric span {
-  min-width: 0;
-  overflow: hidden;
+.mealshark-summary-line {
+  margin: 0;
   color: #64748b;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .mealshark-mode-control {
@@ -274,8 +254,15 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 14px;
+}
+
+.mealshark-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .mealshark-top-label {
@@ -288,16 +275,8 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
   white-space: nowrap;
 }
 
-.mealshark-top-input {
-  width: 56px;
-  height: 30px;
-  padding: 0 6px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #111827;
-  font: inherit;
-  text-align: center;
+.mealshark-list-sentinel {
+  height: 1px;
 }
 
 .mealshark-filter-toggle {
@@ -462,6 +441,16 @@ html.mealshark-page-open body > #app [class~="fixed"][class~="w-full"] {
 .mealshark-badge-discount {
   background: #e0f2fe;
   color: #075985;
+}
+
+.mealshark-badge-sold-out {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.mealshark-card-sold-out {
+  opacity: 0.55;
+  filter: grayscale(0.8);
 }
 
 .mealshark-card h4 {

@@ -10,10 +10,12 @@
   const MAP_ACTION = "mealshark-map-action";
   const NATIVE_FILTER_TYPE = "mealshark-native-filter";
   const FAVORITES_TYPE = "mealshark-favorites";
+  const MAP_BOUNDS_TYPE = "mealshark-map-bounds";
   const APP_TILE_ANNOTATED_CLASS = "mealshark-app-tile-annotated";
   const APP_TILE_PRICE_CLASS = "mealshark-app-price-line";
   const CREDIT_FILTER_MIN = 1;
   const CREDIT_FILTER_MAX = 14;
+  const LIST_PAGE_SIZE = 30;
   const SORT_MODES = {
     DISCOUNT: "discount",
     CREDIT_DESC: "credit-desc",
@@ -27,11 +29,16 @@
     menuUrl: "",
     capturedAt: "",
     cityName: "",
+    menuDate: "",
     creditUnitPrice: null,
     mealPalFilter: null,
     favoriteRestaurantIds: null,
-    topN: 50,
+    mapBounds: null,
+    renderLimit: LIST_PAGE_SIZE,
+    listKeys: "",
+    lastListLength: 0,
     newOnly: false,
+    mapAreaOnly: false,
     sortMode: SORT_MODES.DISCOUNT,
     selectedMealKey: ""
   };
@@ -97,11 +104,10 @@
   async function loadSettings() {
     const result = await storageGet(SETTINGS_KEY);
     const settings = result[SETTINGS_KEY] || {};
-    const hasCurrentSettings = settings.version === SETTINGS_VERSION;
 
     state.collapsed = Boolean(settings.collapsed);
-    state.topN = hasCurrentSettings ? clampTopN(settings.topN ?? state.topN) : state.topN;
     state.newOnly = Boolean(settings.newOnly);
+    state.mapAreaOnly = Boolean(settings.mapAreaOnly);
     state.sortMode = normalizeSortMode(settings.sortMode);
   }
 
@@ -110,8 +116,8 @@
       [SETTINGS_KEY]: {
         version: SETTINGS_VERSION,
         collapsed: state.collapsed,
-        topN: state.topN,
         newOnly: state.newOnly,
+        mapAreaOnly: state.mapAreaOnly,
         sortMode: state.sortMode
       }
     });
@@ -119,16 +125,6 @@
 
   function normalizeSortMode(value) {
     return Object.values(SORT_MODES).includes(value) ? value : SORT_MODES.DISCOUNT;
-  }
-
-  function clampTopN(value) {
-    const nextValue = Number.parseInt(value, 10);
-
-    if (!Number.isFinite(nextValue)) {
-      return 50;
-    }
-
-    return Math.max(nextValue, 1);
   }
 
   function ready(callback) {
@@ -276,8 +272,30 @@
     return true;
   }
 
+  function mealInMapBounds(meal, bounds) {
+    const longitude = toFiniteNumber(meal.coordinates?.longitude);
+    const latitude = toFiniteNumber(meal.coordinates?.latitude);
+
+    if (longitude === null || latitude === null) {
+      return false;
+    }
+
+    return (
+      longitude >= bounds.west &&
+      longitude <= bounds.east &&
+      latitude >= bounds.south &&
+      latitude <= bounds.north
+    );
+  }
+
   function getMealPalFilteredMeals() {
-    return state.meals.filter((meal) => mealMatchesMealPalFilter(meal, state.mealPalFilter));
+    let meals = state.meals.filter((meal) => mealMatchesMealPalFilter(meal, state.mealPalFilter));
+
+    if (state.mapAreaOnly && state.mapBounds) {
+      meals = meals.filter((meal) => mealInMapBounds(meal, state.mapBounds));
+    }
+
+    return meals;
   }
 
   function ensureRoot() {
@@ -302,19 +320,19 @@
 
     const header = createElement("header", "mealshark-header");
     const titleBlock = createElement("div", "mealshark-title-block");
-    const eyebrow = createElement("p", "mealshark-eyebrow", "Mealshark");
-    const title = createElement("h2", null, "Meal insights");
-    titleBlock.append(eyebrow, title);
+    const title = createElement("h2", null, "Mealshark");
+    titleBlock.append(title);
 
     dom.closeButton = createElement("button", "mealshark-close", "×");
     dom.closeButton.type = "button";
     dom.closeButton.setAttribute("aria-label", "Close Mealshark");
     header.append(titleBlock, dom.closeButton);
 
-    const metrics = createElement("div", "mealshark-metrics");
-    dom.totalMealsMetric = buildMetric("Meals", "0");
-    dom.newMealsMetric = buildMetric("New", "0");
-    metrics.append(dom.totalMealsMetric, dom.newMealsMetric);
+    const summary = createElement("div", "mealshark-summary");
+    dom.summaryTitle = createElement("p", "mealshark-summary-title", "Stats");
+    dom.summaryLine = createElement("p", "mealshark-summary-line", "");
+    dom.summaryLine.hidden = true;
+    summary.append(dom.summaryTitle, dom.summaryLine);
 
     dom.modeControl = createElement("div", "mealshark-mode-control");
     dom.modeControl.setAttribute("role", "group");
@@ -346,16 +364,8 @@
     dom.modeControl.append(discountModeButton, dom.creditModeGroup);
 
     const controls = createElement("div", "mealshark-controls");
-    const topLabel = createElement("label", "mealshark-top-label");
-    const topLabelStart = createElement("span", null, "Display up to");
-    dom.topNInput = createElement("input", "mealshark-top-input");
-    dom.topNInput.type = "number";
-    dom.topNInput.min = "1";
-    dom.topNInput.step = "1";
-    dom.topNInput.value = String(state.topN);
-    dom.topNInput.setAttribute("aria-label", "Number of results to display");
-    dom.topNResultText = createElement("span", null, "of 0 results");
-    topLabel.append(topLabelStart, dom.topNInput, dom.topNResultText);
+    dom.resultCount = createElement("span", "mealshark-top-label", "0 results");
+    dom.resultCount.setAttribute("aria-live", "polite");
 
     const filterLabel = createElement("label", "mealshark-filter-toggle");
     dom.newOnlyInput = createElement("input");
@@ -366,7 +376,19 @@
     const filterText = createElement("span", "mealshark-filter-text", "New only");
     filterLabel.append(dom.newOnlyInput, filterTrack, filterText);
 
-    controls.append(topLabel, filterLabel);
+    const mapAreaLabel = createElement("label", "mealshark-filter-toggle");
+    mapAreaLabel.title = "Only show meals within the current map view";
+    dom.mapAreaInput = createElement("input");
+    dom.mapAreaInput.type = "checkbox";
+    dom.mapAreaInput.checked = state.mapAreaOnly;
+    const mapAreaTrack = createElement("span", "mealshark-filter-track");
+    mapAreaTrack.setAttribute("aria-hidden", "true");
+    const mapAreaText = createElement("span", "mealshark-filter-text", "Search in map");
+    mapAreaLabel.append(dom.mapAreaInput, mapAreaTrack, mapAreaText);
+
+    const toggleGroup = createElement("div", "mealshark-toggle-group");
+    toggleGroup.append(mapAreaLabel, filterLabel);
+    controls.append(toggleGroup, dom.resultCount);
 
     dom.emptyState = createElement(
       "p",
@@ -377,9 +399,20 @@
     const mealSection = createElement("section", "mealshark-section");
     mealSection.append(dom.modeControl);
     dom.mealList = createElement("div", "mealshark-list");
-    mealSection.append(dom.mealList);
+    dom.listSentinel = createElement("div", "mealshark-list-sentinel");
+    dom.listSentinel.setAttribute("aria-hidden", "true");
+    mealSection.append(dom.mealList, dom.listSentinel);
 
-    dom.panel.append(header, metrics, controls, dom.emptyState, mealSection);
+    new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          extendRenderLimit();
+        }
+      },
+      { rootMargin: "600px" }
+    ).observe(dom.listSentinel);
+
+    dom.panel.append(header, summary, controls, dom.emptyState, mealSection);
     root.append(dom.bubble, dom.panel);
     document.body.appendChild(root);
 
@@ -395,15 +428,14 @@
       render();
     });
 
-    dom.topNInput.addEventListener("change", () => {
-      state.topN = clampTopN(dom.topNInput.value);
-      dom.topNInput.value = String(state.topN);
+    dom.newOnlyInput.addEventListener("change", () => {
+      state.newOnly = dom.newOnlyInput.checked;
       saveSettings();
       render();
     });
 
-    dom.newOnlyInput.addEventListener("change", () => {
-      state.newOnly = dom.newOnlyInput.checked;
+    dom.mapAreaInput.addEventListener("change", () => {
+      state.mapAreaOnly = dom.mapAreaInput.checked;
       saveSettings();
       render();
     });
@@ -411,15 +443,15 @@
     return root;
   }
 
-  function buildMetric(label, value) {
-    const metric = createElement("div", "mealshark-metric");
-    const metricValue = createElement("strong", null, value);
-    const metricLabel = createElement("span", null, label);
+  function extendRenderLimit() {
+    if (state.renderLimit >= state.lastListLength) {
+      return;
+    }
 
-    metric.setAttribute("aria-label", `${value} ${label}`);
-    metric.append(metricValue, metricLabel);
-    return metric;
+    state.renderLimit += LIST_PAGE_SIZE;
+    render();
   }
+
 
   function buildModeButton(sortMode, label, ariaLabel) {
     const button = createElement("button", "mealshark-mode-button", label);
@@ -439,20 +471,6 @@
     return button;
   }
 
-  function setMetric(metric, value, label) {
-    const valueElement = metric.querySelector("strong");
-    const labelElement = metric.querySelector("span");
-
-    if (valueElement) {
-      valueElement.textContent = value;
-    }
-
-    if (labelElement && label !== undefined) {
-      labelElement.textContent = label;
-    }
-
-    metric.setAttribute("aria-label", `${value} ${labelElement?.textContent || ""}`.trim());
-  }
 
   function handleMenuPayload(payload) {
     if (!payload || !Array.isArray(payload.meals)) {
@@ -468,6 +486,7 @@
     state.menuUrl = payload.url || "";
     state.capturedAt = payload.capturedAt || new Date().toISOString();
     state.cityName = safeString(payload.cityName);
+    state.menuDate = safeString(payload.date);
     state.creditUnitPrice = toFiniteNumber(payload.creditUnitPrice);
     render();
     scheduleMealPalTileAnnotation();
@@ -493,14 +512,39 @@
     render();
   }
 
+  function handleMapBoundsPayload(payload) {
+    const west = toFiniteNumber(payload?.west);
+    const south = toFiniteNumber(payload?.south);
+    const east = toFiniteNumber(payload?.east);
+    const north = toFiniteNumber(payload?.north);
+
+    if (west === null || south === null || east === null || north === null) {
+      return;
+    }
+
+    state.mapBounds = { west, south, east, north };
+
+    if (state.mapAreaOnly) {
+      render();
+    }
+  }
+
   function formatMetricCityName(cityName) {
     return cityName === "New York City" ? "New York" : cityName;
   }
 
-  function buildMetricLabel(label) {
-    const cityName = formatMetricCityName(state.cityName);
+  function buildSummaryTitle() {
+    const match = safeString(state.menuDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
 
-    return cityName ? `${label} in ${cityName}` : label;
+    if (!match) {
+      return "Stats";
+    }
+
+    const dayName = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString(undefined, {
+      weekday: "long"
+    });
+
+    return `${dayName}'s stats`;
   }
 
   function getDiscount(meal) {
@@ -669,6 +713,9 @@
         type: MAP_ACTION,
         payload: {
           action,
+          // While the list is scoped to the map view, the map is user input —
+          // never move it, or a click would rewrite the search.
+          suppressMove: state.mapAreaOnly === true,
           scheduleId: meal?.scheduleId || "",
           mealId: meal?.mealId || "",
           mealName: getMealName(meal || {}),
@@ -842,14 +889,40 @@
     const totalNewMeals = state.meals.filter((meal) => meal.isNew);
     const newMeals = filteredMeals.filter((meal) => meal.isNew);
     const listMeals = state.newOnly ? newMeals : filteredMeals;
-    const sortedMeals = sortMeals(listMeals).slice(0, state.topN);
+    const sortedMeals = sortMeals(listMeals);
+    // soldOut participates so late-arriving inventory data restyles rendered cards.
+    const listKeys = sortedMeals.map((meal) => getMealKey(meal) + (meal.soldOut ? "!" : "")).join("|");
+    const listChanged = listKeys !== state.listKeys;
 
-    setMetric(dom.totalMealsMetric, String(state.meals.length), buildMetricLabel("Meals"));
-    setMetric(dom.newMealsMetric, String(totalNewMeals.length), "New");
+    if (listChanged) {
+      state.listKeys = listKeys;
+      state.renderLimit = LIST_PAGE_SIZE;
+    }
 
-    dom.topNInput.value = String(state.topN);
-    dom.topNResultText.textContent = `of ${listMeals.length} ${listMeals.length === 1 ? "result" : "results"}`;
+    state.lastListLength = sortedMeals.length;
+
+    const visibleMeals = sortedMeals.slice(0, state.renderLimit);
+
+    const soldOutCount = state.meals.filter((meal) => meal.soldOut).length;
+    const cityName = formatMetricCityName(state.cityName);
+    const hasMeals = state.meals.length > 0;
+
+    const statsParts = [
+      `${state.meals.length} ${state.meals.length === 1 ? "meal" : "meals"}` + (cityName ? ` in ${cityName}` : ""),
+      `${totalNewMeals.length} new`
+    ];
+
+    if (soldOutCount > 0) {
+      statsParts.push(`${soldOutCount} sold out`);
+    }
+
+    dom.summaryTitle.textContent = hasMeals ? buildSummaryTitle() : "Stats";
+    dom.summaryLine.textContent = statsParts.join(" · ");
+    dom.summaryLine.hidden = !hasMeals;
+
+    dom.resultCount.textContent = `${listMeals.length} ${listMeals.length === 1 ? "result" : "results"}`;
     dom.newOnlyInput.checked = state.newOnly;
+    dom.mapAreaInput.checked = state.mapAreaOnly;
     dom.emptyState.hidden = state.meals.length > 0;
 
     for (const button of dom.modeButtons) {
@@ -875,28 +948,54 @@
 
     const emptyMessage = !state.meals.length
       ? "No discount data in the captured menu."
-      : state.newOnly
-        ? "No new meals match the current MealPal filters."
-        : "No meals match the current MealPal filters.";
+      : state.mapAreaOnly
+        ? "No matching meals in the current map view."
+        : state.newOnly
+          ? "No new meals match the current MealPal filters."
+          : "No meals match the current MealPal filters.";
 
-    renderMealList(dom.mealList, sortedMeals, emptyMessage);
+    renderMealList(dom.mealList, visibleMeals, emptyMessage, listChanged);
+
+    if (listChanged) {
+      dom.panel.scrollTop = 0;
+    }
   }
 
-  function renderMealList(container, meals, emptyMessage) {
-    container.replaceChildren();
+  function renderMealList(container, meals, emptyMessage, rebuild) {
+    const existingCards = container.querySelectorAll(".mealshark-card");
 
-    if (!meals.length) {
-      container.append(createElement("p", "mealshark-list-empty", emptyMessage));
+    if (rebuild || !meals.length || existingCards.length > meals.length) {
+      container.replaceChildren();
+
+      if (!meals.length) {
+        container.append(createElement("p", "mealshark-list-empty", emptyMessage));
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+
+      for (const meal of meals) {
+        fragment.append(buildMealCard(meal));
+      }
+
+      container.append(fragment);
       return;
     }
 
-    const fragment = document.createDocumentFragment();
-
-    for (const meal of meals) {
-      fragment.append(buildMealCard(meal));
+    // Same list, possibly extended: refresh selection styling and append the tail.
+    for (const card of existingCards) {
+      card.classList.toggle("mealshark-card-active", card.dataset.mealKey === state.selectedMealKey);
     }
 
-    container.append(fragment);
+    if (existingCards.length < meals.length) {
+      const fragment = document.createDocumentFragment();
+
+      for (const meal of meals.slice(existingCards.length)) {
+        fragment.append(buildMealCard(meal));
+      }
+
+      container.append(fragment);
+    }
   }
 
   function buildMealCard(meal) {
@@ -907,7 +1006,9 @@
     const mealKey = getMealKey(meal);
 
     card.type = "button";
+    card.dataset.mealKey = mealKey;
     card.classList.toggle("mealshark-card-active", mealKey === state.selectedMealKey);
+    card.classList.toggle("mealshark-card-sold-out", meal.soldOut === true);
     card.setAttribute("aria-label", `${getMealName(meal)} from ${getRestaurantName(meal)}`);
 
     card.addEventListener("mouseenter", () => {
@@ -948,6 +1049,10 @@
     }
 
     badges.append(createElement("span", "mealshark-badge mealshark-badge-discount", formatDiscount(meal)));
+
+    if (meal.soldOut) {
+      badges.append(createElement("span", "mealshark-badge mealshark-badge-sold-out", "Sold out"));
+    }
 
     const title = createElement("h4", null, getMealName(meal));
     const restaurant = createElement("p", "mealshark-restaurant", getRestaurantName(meal));
@@ -1022,6 +1127,10 @@
 
     if (event.data.type === FAVORITES_TYPE) {
       handleFavoritesPayload(event.data.payload);
+    }
+
+    if (event.data.type === MAP_BOUNDS_TYPE) {
+      handleMapBoundsPayload(event.data.payload);
     }
   });
 

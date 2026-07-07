@@ -13,12 +13,16 @@ by MealPal.
 ## Features
 
 - Adds a Mealshark panel on MealPal `/lunch` and `/dinner` pages.
+- Shows the day's stats at a glance: total meals, new meals, and sold-out meals.
 - Filter for newly added meals.
 - Sorts meals by best discount.
 - Sorts meals by best discount given credit value, with credit value ascending and descending.
+- Infinitely scrolling results list.
 - Shows meal pricing information transparently in USD.
+- Grays out sold-out meals.
 - Respects MealPal's native filters when set: credit range, vegetarian, cuisine, favorites, and text search.
-- Highlights and opens restaurants on the MealPal map when Mealshark cards are hovered or clicked.
+- "Search in map" mode that scopes results to the current map view as you drag and zoom.
+- Highlights restaurants on the MealPal map when Mealshark cards are hovered; clicking opens the restaurant's popup, panning to it unless "Search in map" is on (the map does not pan in that mode to avoid triggering a new search).
 
 ## Gallery
 

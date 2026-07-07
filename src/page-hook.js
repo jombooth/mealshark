@@ -5,6 +5,7 @@
   const MAP_ACTION = "mealshark-map-action";
   const NATIVE_FILTER_TYPE = "mealshark-native-filter";
   const FAVORITES_TYPE = "mealshark-favorites";
+  const MAP_BOUNDS_TYPE = "mealshark-map-bounds";
 
   if (window[INSTALLED_KEY]) {
     return;
@@ -16,6 +17,7 @@
   let latestMenuBody = null;
   let latestMenuUrl = "";
   let latestDiscounts = new Map();
+  let latestInventories = new Map();
   let latestCreditUnitPrice = null;
   const latestCreditUnitPrices = new Map();
   let latestNativeFilter = null;
@@ -23,6 +25,8 @@
   let latestFavoriteRestaurants = null;
   let searchInputDebounce = 0;
   let mapActionToken = 0;
+  let cachedMapController = null;
+  let latestMapBoundsSignature = "";
 
   const HOVER_LAYER_IDS = [
     "green-standard-hover-1",
@@ -89,6 +93,21 @@
       const parsedUrl = new URL(url, window.location.href);
 
       return parsedUrl.hostname.endsWith("mealpal.com") && parsedUrl.pathname === "/1/functions/getCurrentUser";
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function isInventoriesUrl(url) {
+    try {
+      const parsedUrl = new URL(url, window.location.href);
+
+      return (
+        parsedUrl.hostname.endsWith("mealpal.com") &&
+        /^\/api\/v\d+\/cities\/[^/]+\/dates\/[^/]+\/product_offerings\/[^/]+\/spending_strategies\/[^/]+\/menu_inventories\/?$/.test(
+          parsedUrl.pathname
+        )
+      );
     } catch (_error) {
       return false;
     }
@@ -214,6 +233,7 @@
           description: safeString(meal?.description),
           imageUrl: safeString(meal?.image),
           isNew: schedule?.is_featured === true,
+          soldOut: latestInventories.get(safeString(schedule?.id)) === 0,
           discountLabel: discount?.label || "",
           discountPercentage: discount?.percentage ?? toDiscountPercentage(schedule?.mp_discount_percentage),
           mealCreditPrice: toNumber(schedule?.half_meal_credit_price) ?? toNumber(schedule?.meal_credit_price),
@@ -632,6 +652,56 @@
     }
   }
 
+  function getValidMapController() {
+    if (!document.getElementById("map")) {
+      cachedMapController = null;
+      return null;
+    }
+
+    const container = cachedMapController?.map?.getContainer?.();
+
+    if (!container || !container.isConnected) {
+      cachedMapController = findMapController();
+    }
+
+    return cachedMapController;
+  }
+
+  function postMapBounds(force = false) {
+    const map = getValidMapController()?.map;
+    const bounds = map?.getBounds?.();
+
+    if (!bounds) {
+      return;
+    }
+
+    const payload = {
+      west: Number(bounds.getWest().toFixed(5)),
+      south: Number(bounds.getSouth().toFixed(5)),
+      east: Number(bounds.getEast().toFixed(5)),
+      north: Number(bounds.getNorth().toFixed(5))
+    };
+    const signature = JSON.stringify(payload);
+
+    if (!force && signature === latestMapBoundsSignature) {
+      return;
+    }
+
+    latestMapBoundsSignature = signature;
+    window.postMessage(
+      {
+        source: PAGE_SOURCE,
+        type: MAP_BOUNDS_TYPE,
+        payload: { ...payload, capturedAt: new Date().toISOString() }
+      },
+      window.location.origin
+    );
+  }
+
+  function startMapBoundsObserver() {
+    window.setInterval(postMapBounds, 700);
+  }
+
   function getInteractiveEventElement(target) {
     const element =
       target instanceof Element ? target : target?.parentElement instanceof Element ? target.parentElement : null;
@@ -942,13 +1012,14 @@
     const coordinates = getActionCoordinates(payload, restaurant);
 
     if (action === "highlight") {
-      moveCoordinateIntoView(controller, coordinates);
+      // Hover must never move the camera: panning on hover is jarring, and
+      // with map-area scoping it would rebuild the list mid-hover.
       highlightRestaurantWithRetry(restaurantId, token);
       return;
     }
 
     if (action === "select") {
-      const moved = moveCoordinateIntoView(controller, coordinates);
+      const moved = payload?.suppressMove ? false : moveCoordinateIntoView(controller, coordinates);
 
       highlightRestaurantWithRetry(restaurantId, token);
 
@@ -1022,6 +1093,31 @@
     }
   }
 
+  function parseInventoriesText(_url, text) {
+    try {
+      const body = JSON.parse(text);
+
+      if (!Array.isArray(body)) {
+        return;
+      }
+
+      latestInventories = new Map();
+
+      for (const item of body) {
+        const id = safeString(item?.id);
+        const amount = toNumber(item?.amount);
+
+        if (id && amount !== null) {
+          latestInventories.set(id, amount);
+        }
+      }
+
+      postLatestMenu();
+    } catch (_error) {
+      // Ignore non-JSON or malformed responses. The original page request is untouched.
+    }
+  }
+
   function parseCreditPricingText(_url, text) {
     try {
       const body = JSON.parse(text);
@@ -1066,10 +1162,11 @@
   function inspectFetchResponse(url, response) {
     const isMenu = isMenuUrl(url);
     const isDiscount = isDiscountUrl(url);
+    const isInventories = isInventoriesUrl(url);
     const isFavorites = isFavoritesFunctionUrl(url);
     const isCreditPricing = isCurrentUserUrl(url) || isProductOfferingUrl(url);
 
-    if (!isMenu && !isDiscount && !isFavorites && !isCreditPricing) {
+    if (!isMenu && !isDiscount && !isInventories && !isFavorites && !isCreditPricing) {
       return;
     }
 
@@ -1081,6 +1178,8 @@
           parseMenuText(url, text);
         } else if (isDiscount) {
           parseDiscountText(url, text);
+        } else if (isInventories) {
+          parseInventoriesText(url, text);
         } else if (isFavorites) {
           parseFavoritesText(url, text);
         } else {
@@ -1117,10 +1216,11 @@
         const url = this.__mealsharkUrl || this.responseURL || "";
         const isMenu = isMenuUrl(url);
         const isDiscount = isDiscountUrl(url);
+        const isInventories = isInventoriesUrl(url);
         const isFavorites = isFavoritesFunctionUrl(url);
         const isCreditPricing = isCurrentUserUrl(url) || isProductOfferingUrl(url);
 
-        if ((!isMenu && !isDiscount && !isFavorites && !isCreditPricing) || typeof this.responseText !== "string") {
+        if ((!isMenu && !isDiscount && !isInventories && !isFavorites && !isCreditPricing) || typeof this.responseText !== "string") {
           return;
         }
 
@@ -1128,6 +1228,8 @@
           parseMenuText(url, this.responseText);
         } else if (isDiscount) {
           parseDiscountText(url, this.responseText);
+        } else if (isInventories) {
+          parseInventoriesText(url, this.responseText);
         } else if (isFavorites) {
           parseFavoritesText(url, this.responseText);
         } else {
@@ -1155,6 +1257,7 @@
       );
       postNativeFilter(undefined, true);
       postFavorites();
+      postMapBounds(true);
     }
 
     if (event.data?.source === "mealshark-content" && event.data?.type === MAP_ACTION) {
@@ -1163,4 +1266,5 @@
   });
 
   startNativeFilterListeners();
+  startMapBoundsObserver();
 })();
