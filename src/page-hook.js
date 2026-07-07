@@ -438,12 +438,26 @@
     return controller.restaurants.find((restaurant) => restaurant?.id === restaurantId) || null;
   }
 
+  function isMealSearchInput(input) {
+    if (!(input instanceof HTMLInputElement) || input.closest("#mealshark-root")) {
+      return false;
+    }
+
+    const labelText = `${input.getAttribute("placeholder") || ""} ${input.getAttribute("aria-label") || ""}`;
+
+    // The location geocoder is also a "Search by..." input; typing an address
+    // there must not become a meal filter.
+    if (input.closest(".mapboxgl-ctrl-geocoder") || /location/i.test(labelText)) {
+      return false;
+    }
+
+    return /search/i.test(labelText);
+  }
+
   function findMealPalSearchInput() {
     return (
       Array.from(document.querySelectorAll("input[type='text'], input[type='search'], input:not([type])")).find(
-        (input) =>
-          !input.closest("#mealshark-root") &&
-          /search/i.test(`${input.getAttribute("placeholder") || ""} ${input.getAttribute("aria-label") || ""}`)
+        isMealSearchInput
       ) || null
     );
   }
@@ -729,13 +743,7 @@
   }
 
   function handleSearchInputEvent(event) {
-    const target = event.target;
-
-    if (!(target instanceof HTMLInputElement) || target.closest("#mealshark-root")) {
-      return;
-    }
-
-    if (!/search/i.test(`${target.getAttribute("placeholder") || ""} ${target.getAttribute("aria-label") || ""}`)) {
+    if (!isMealSearchInput(event.target)) {
       return;
     }
 
