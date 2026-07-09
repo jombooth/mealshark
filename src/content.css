@@ -41,6 +41,64 @@ html.mealshark-page-open .ReactModal__Overlay {
   max-width: calc(100% - var(--mealshark-split-width)) !important;
 }
 
+/* MealPal sizes its header controls (location, search, Filters) with fixed pixel
+   widths chosen by viewport media queries, so under the split pane they overflow
+   into the panel at many widths. Make them defer to the squeezed container. */
+html.mealshark-page-open .kitchen__header-filters {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+html.mealshark-page-open .kitchen__header-filters > * {
+  min-width: 0 !important;
+}
+
+html.mealshark-page-open .kitchen__meal-search--lg,
+html.mealshark-page-open .kitchen__meal-search {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 90px !important;
+  max-width: 301px !important;
+}
+
+html.mealshark-page-open .kitchen__meal-search input {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+html.mealshark-page-open .location-lookup {
+  min-width: 0 !important;
+}
+
+html.mealshark-page-open .location-lookup__address-container,
+html.mealshark-page-open .location-lookup__button {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+html.mealshark-page-open .kitchen__filters,
+html.mealshark-page-open .kitchen__filters-reset {
+  white-space: nowrap !important;
+  flex: 0 0 auto !important;
+}
+
+/* The Filters/Reset group must keep its natural width; the location section
+   (which can ellipsize) absorbs the squeeze instead. */
+html.mealshark-page-open .kitchen__header-filters > .flex {
+  flex: 0 0 auto !important;
+}
+
+/* Too tight for the quick-reset pill; Reset All remains inside the open filter bar. */
+@media (max-width: 1500px) {
+  html.mealshark-page-open .kitchen__filters-reset {
+    display: none !important;
+  }
+}
+
 #mealshark-root {
   position: fixed;
   top: 0;
@@ -452,6 +510,15 @@ html.mealshark-page-open .ReactModal__Overlay {
 .mealshark-badge-sold-out {
   background: #e2e8f0;
   color: #475569;
+}
+
+.mealshark-pal-original {
+  color: #4a4a4a;
+  text-decoration: line-through;
+}
+
+.mealshark-pal-discount {
+  color: #ff0000;
 }
 
 .mealshark-card-sold-out {

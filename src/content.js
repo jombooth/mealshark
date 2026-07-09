@@ -667,9 +667,18 @@
     return formatMoney(Math.max(retailPrice * (1 - getDiscount(meal) / 100), 0));
   }
 
+  function hasPalPricing(meal) {
+    const creditPrice = toFiniteNumber(meal.mealCreditPrice);
+    const basePrice = toFiniteNumber(meal.baseCreditPrice);
+
+    return creditPrice !== null && basePrice !== null && basePrice > creditPrice;
+  }
+
   function formatCreditPrice(meal) {
     const creditPrice = meal.mealCreditPrice;
-    const creditText = `${creditPrice} ${creditPrice === 1 ? "credit" : "credits"}`;
+    const creditText = hasPalPricing(meal)
+      ? `${meal.baseCreditPrice} ➞ ${creditPrice} credits`
+      : `${creditPrice} ${creditPrice === 1 ? "credit" : "credits"}`;
     const effectivePrice = getEffectiveMealPrice(meal);
 
     if (!effectivePrice) {
@@ -778,9 +787,15 @@
     }
 
     if (fields.mealCreditPrice !== null) {
+      // Pal-priced tiles render "14 ➞ 12"; the parsed chip number is the base price.
       const matchingCreditMeal = candidates.find((meal) => {
         const creditPrice = toFiniteNumber(meal.mealCreditPrice);
-        return creditPrice !== null && Math.abs(creditPrice - fields.mealCreditPrice) < 0.01;
+        const basePrice = toFiniteNumber(meal.baseCreditPrice);
+
+        return (
+          (creditPrice !== null && Math.abs(creditPrice - fields.mealCreditPrice) < 0.01) ||
+          (basePrice !== null && Math.abs(basePrice - fields.mealCreditPrice) < 0.01)
+        );
       });
 
       if (matchingCreditMeal) {
@@ -791,11 +806,29 @@
     return candidates[0];
   }
 
+  function rewriteDiscountChip(container, meal) {
+    if (!meal?.discountComputed) {
+      return;
+    }
+
+    const chipText = `SAVE ${formatDiscount(meal)}`;
+
+    for (const strong of container.querySelectorAll(".discount-percentage-label strong, .markdown strong")) {
+      if (/SAVE\s+\d+(?:\.\d+)?%/i.test(strong.textContent || "") && strong.textContent !== chipText) {
+        strong.textContent = chipText;
+      }
+    }
+  }
+
   function annotateMealPalTile(tile) {
     const content = tile.children[1];
     const existingLine = tile.querySelector(`.${APP_TILE_PRICE_CLASS}`);
     const meal = getMealForTile(tile);
     const priceText = meal ? formatMealPalTilePrice(meal) : "";
+
+    if (meal) {
+      rewriteDiscountChip(tile, meal);
+    }
 
     if (!content || !priceText) {
       existingLine?.remove();
@@ -823,6 +856,54 @@
     tile.classList.add(APP_TILE_ANNOTATED_CLASS);
   }
 
+  function getMealForModal(modal) {
+    // The modal names the restaurant and meal as short text lines; find the
+    // pair that resolves in the meal index (restaurant line precedes meal line).
+    const texts = [];
+
+    for (const element of modal.querySelectorAll("p, span, div, h1, h2, h3, h4")) {
+      if (element.childElementCount !== 0) {
+        continue;
+      }
+
+      const text = safeString(element.textContent);
+
+      if (text && text.length < 90 && !texts.includes(text)) {
+        texts.push(text);
+      }
+
+      if (texts.length >= 12) {
+        break;
+      }
+    }
+
+    for (let i = 0; i < texts.length; i += 1) {
+      for (let j = i + 1; j < texts.length; j += 1) {
+        const matches = state.mealIndex.get(buildLookupKey(texts[j], texts[i], ""));
+
+        if (matches?.length) {
+          return matches[0];
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function annotateMealPalModal() {
+    const modal = document.querySelector(".ReactModal__Content");
+
+    if (!modal) {
+      return;
+    }
+
+    const meal = getMealForModal(modal);
+
+    if (meal) {
+      rewriteDiscountChip(modal, meal);
+    }
+  }
+
   function annotateMealPalTiles() {
     if (!isSupportedPage() || !state.mealIndex.size) {
       return;
@@ -831,6 +912,8 @@
     for (const tile of findMealPalTiles()) {
       annotateMealPalTile(tile);
     }
+
+    annotateMealPalModal();
   }
 
   function scheduleMealPalTileAnnotation() {
@@ -1057,20 +1140,33 @@
     const title = createElement("h4", null, getMealName(meal));
     const restaurant = createElement("p", "mealshark-restaurant", getRestaurantName(meal));
     const meta = createElement("p", "mealshark-meta");
-    const priceParts = [];
 
     if (meal.mealCreditPrice !== null && meal.mealCreditPrice !== undefined) {
-      priceParts.push(formatCreditPrice(meal));
+      if (hasPalPricing(meal)) {
+        // Mirror the MealPal card's pal-pricing chip: struck-through original, red arrow price.
+        meta.append(
+          createElement("span", "mealshark-pal-original", String(meal.baseCreditPrice)),
+          createElement("span", "mealshark-pal-discount", ` ➞ ${meal.mealCreditPrice}`),
+          " credits"
+        );
+
+        const effectivePrice = getEffectiveMealPrice(meal);
+
+        if (effectivePrice) {
+          meta.append(` (${effectivePrice})`);
+        }
+      } else {
+        meta.append(formatCreditPrice(meal));
+      }
     }
 
     if (meal.retailPrice) {
-      priceParts.push(`retail ${meal.retailPrice}`);
+      meta.append(`${meta.childNodes.length ? " | " : ""}retail ${meal.retailPrice}`);
     }
 
-    meta.textContent = priceParts.join(" | ");
     body.append(badges, title, restaurant);
 
-    if (meta.textContent) {
+    if (meta.childNodes.length) {
       body.append(meta);
     }
 

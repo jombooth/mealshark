@@ -207,16 +207,47 @@
     return { longitude, latitude };
   }
 
+  function parseMoneyString(value) {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
+    }
+
+    if (typeof value !== "string") {
+      return null;
+    }
+
+    const parsed = Number.parseFloat(value.replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   function normalizeMenuResponse(body, url, discountMap) {
     const restaurants = Array.isArray(body?.restaurants) ? body.restaurants : [];
+    const creditUnitPrice = getCreditUnitPriceForMenu(url);
     const meals = [];
 
     for (const restaurant of restaurants) {
       const schedules = Array.isArray(restaurant?.schedules) ? restaurant.schedules : [];
+      // "Pal pricing": a restaurant-level credit discount, shown as e.g. "14 ➞ 12".
+      const creditDiscount = toNumber(restaurant?.meal_credit_discount) || 0;
 
       for (const schedule of schedules) {
         const meal = schedule?.meal || {};
         const discount = discountMap.get(schedule?.id) || discountMap.get(meal?.id);
+        const baseCreditPrice = toNumber(schedule?.half_meal_credit_price) ?? toNumber(schedule?.meal_credit_price);
+        const mealCreditPrice = baseCreditPrice === null ? null : Math.max(baseCreditPrice - creditDiscount, 0);
+        const retailPrice = safeString(meal?.retail_price_display_string);
+        const retailAmount = parseMoneyString(retailPrice);
+        let discountLabel = discount?.label || "";
+        let discountPercentage = discount?.percentage ?? toDiscountPercentage(schedule?.mp_discount_percentage);
+        let discountComputed = false;
+
+        // The API's discount figures don't account for pal pricing (and can be
+        // plain wrong); prefer the actual credit cost against retail.
+        if (mealCreditPrice !== null && creditUnitPrice !== null && retailAmount !== null && retailAmount > 0) {
+          discountPercentage = Math.round(Math.max((1 - (mealCreditPrice * creditUnitPrice) / retailAmount) * 100, 0));
+          discountLabel = "";
+          discountComputed = true;
+        }
 
         meals.push({
           scheduleId: safeString(schedule?.id),
@@ -234,10 +265,12 @@
           imageUrl: safeString(meal?.image),
           isNew: schedule?.is_featured === true,
           soldOut: latestInventories.get(safeString(schedule?.id)) === 0,
-          discountLabel: discount?.label || "",
-          discountPercentage: discount?.percentage ?? toDiscountPercentage(schedule?.mp_discount_percentage),
-          mealCreditPrice: toNumber(schedule?.half_meal_credit_price) ?? toNumber(schedule?.meal_credit_price),
-          retailPrice: safeString(meal?.retail_price_display_string)
+          discountLabel,
+          discountPercentage,
+          discountComputed,
+          mealCreditPrice,
+          baseCreditPrice,
+          retailPrice
         });
       }
     }
