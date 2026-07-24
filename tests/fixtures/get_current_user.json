@@ -1,0 +1,19 @@
+{
+  "result": {
+    "id": "b0b50000-0000-4000-8000-0000000000u1",
+    "objectId": "b0b50000-0000-4000-8000-0000000000u1",
+    "email": "bob@bobs-burgers.example",
+    "firstName": "Bob",
+    "lastName": "Belcher",
+    "type": "subscriber",
+    "lunchPlanType": "standard",
+    "lunchPlanMealKits": {
+      "standard": { "pricePerMeal": 1.2 }
+    },
+    "dinnerPlanMealKits": {},
+    "favoriteRestaurants": [
+      "b0b50000-0000-4000-8000-0000000000r1",
+      "b0b50000-0000-4000-8000-0000000000r4"
+    ]
+  }
+}

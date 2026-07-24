@@ -1346,4 +1346,16 @@
 
   startNativeFilterListeners();
   startMapBoundsObserver();
+
+  // Test-only exports; inert in the browser (no `module` in content scripts).
+  if (typeof module === "object" && module !== null && module.exports) {
+    module.exports = {
+      parseMenuText,
+      parseDiscountText,
+      parseInventoriesText,
+      parseCreditPricingText,
+      parseFavoritesText,
+      getLatestPayload: () => latestPayload
+    };
+  }
 })();

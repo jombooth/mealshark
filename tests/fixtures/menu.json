@@ -1,0 +1,320 @@
+{
+  "generated_at": "2026-07-23T21:07:26Z",
+  "date": "2026-07-24",
+  "extended_kitchen_start_time": "2026-07-24T14:30:00.000Z",
+  "city": {
+    "id": "b0b50000-0000-4000-8000-0000000000c1",
+    "name": "Seymour's Bay",
+    "state": "NJ",
+    "time_zone_name": "America/New_York",
+    "timezone_offset_hours": -4
+  },
+  "restaurants": [
+    {
+      "id": "b0b50000-0000-4000-8000-0000000000r1",
+      "name": "Bob's Burgers - Ocean Ave",
+      "address": "123 Ocean Ave",
+      "pick_up_instructions": "Louise will judge you at the counter.",
+      "special_access": false,
+      "priority": 1,
+      "mp_discount_percentage": 0.7,
+      "full_address": "123 Ocean Ave, Seymour's Bay, NJ",
+      "kitchen_times": [
+        {
+          "before": "2026-07-24T14:30:00.000-04:00",
+          "open": "2026-07-24T11:00:00.000-04:00",
+          "close": "2026-07-24T14:30:00.000-04:00"
+        }
+      ],
+      "meal_credit_discount": 2,
+      "coordinates": { "longitude": "-73.98000000", "latitude": "40.61500000" },
+      "neighborhood": { "id": "b0b50000-0000-4000-8000-0000000000n1", "name": "Ocean Avenue" },
+      "schedules": [
+        {
+          "id": "b0b50000-0000-4000-8000-0000000000s1",
+          "priority": 1,
+          "packaging": null,
+          "is_featured": true,
+          "tier": "standard",
+          "meal_credit_price": 12,
+          "half_meal_credit_price": 12,
+          "extended_kitchen_meal_credit_price": 13,
+          "extended_kitchen_half_meal_credit_price": 13,
+          "classic_kitchen_savings_meal_credit_price": 11,
+          "classic_kitchen_savings_half_meal_credit_price": 11,
+          "mp_discount_percentage": "0.7",
+          "meal": {
+            "id": "b0b50000-0000-4000-8000-0000000000m1",
+            "name": "New Bacon-ings Burger",
+            "description": "beef patty, bacon, new beginnings, brioche bun",
+            "cuisine": "american",
+            "image": "https://images.example/new-baconings.jpeg",
+            "veg": false,
+            "healthy": false,
+            "healthy_subtext": "",
+            "meal_group": "burgers",
+            "portion_size_key": "regular",
+            "retail_price_display_string": "$18.10",
+            "portion": "regular"
+          }
+        },
+        {
+          "id": "b0b50000-0000-4000-8000-0000000000s2",
+          "priority": 2,
+          "packaging": null,
+          "is_featured": false,
+          "tier": "standard",
+          "meal_credit_price": 10,
+          "half_meal_credit_price": 10,
+          "extended_kitchen_meal_credit_price": 11,
+          "extended_kitchen_half_meal_credit_price": 11,
+          "classic_kitchen_savings_meal_credit_price": 9,
+          "classic_kitchen_savings_half_meal_credit_price": 9,
+          "mp_discount_percentage": "0.6",
+          "meal": {
+            "id": "b0b50000-0000-4000-8000-0000000000m2",
+            "name": "Sweaty Palms Hearts of Palm Burger",
+            "description": "hearts of palm patty, sweat-free lettuce, vegan aioli",
+            "cuisine": "american",
+            "image": "https://images.example/sweaty-palms.jpeg",
+            "veg": true,
+            "healthy": true,
+            "healthy_subtext": "Plant Based",
+            "meal_group": "burgers",
+            "portion_size_key": "regular",
+            "retail_price_display_string": "$15.00",
+            "portion": "regular"
+          }
+        },
+        {
+          "id": "b0b50000-0000-4000-8000-0000000000s3",
+          "priority": 3,
+          "packaging": null,
+          "is_featured": false,
+          "tier": "standard",
+          "meal_credit_price": 14,
+          "half_meal_credit_price": 14,
+          "extended_kitchen_meal_credit_price": 15,
+          "extended_kitchen_half_meal_credit_price": 15,
+          "classic_kitchen_savings_meal_credit_price": 13,
+          "classic_kitchen_savings_half_meal_credit_price": 13,
+          "mp_discount_percentage": "0.7",
+          "meal": {
+            "id": "b0b50000-0000-4000-8000-0000000000m3",
+            "name": "Poutine on the Ritz Burger",
+            "description": "burger topped with poutine, gravy, formal wear optional",
+            "cuisine": "american",
+            "image": "https://images.example/poutine-ritz.jpeg",
+            "veg": false,
+            "healthy": false,
+            "healthy_subtext": "",
+            "meal_group": "burgers",
+            "portion_size_key": "large",
+            "retail_price_display_string": "$24.00",
+            "portion": "large"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b0b50000-0000-4000-8000-0000000000r2",
+      "name": "Jimmy Pesto's Pizzeria",
+      "address": "124 Ocean Ave",
+      "pick_up_instructions": "Ask for Jimmy Jr.",
+      "special_access": false,
+      "priority": 1,
+      "mp_discount_percentage": 0.35,
+      "full_address": "124 Ocean Ave, Seymour's Bay, NJ",
+      "kitchen_times": [
+        {
+          "before": "2026-07-24T14:30:00.000-04:00",
+          "open": "2026-07-24T11:00:00.000-04:00",
+          "close": "2026-07-24T14:30:00.000-04:00"
+        }
+      ],
+      "meal_credit_discount": 0,
+      "coordinates": { "longitude": "-73.98010000", "latitude": "40.61510000" },
+      "neighborhood": { "id": "b0b50000-0000-4000-8000-0000000000n1", "name": "Ocean Avenue" },
+      "schedules": [
+        {
+          "id": "b0b50000-0000-4000-8000-0000000000s4",
+          "priority": 1,
+          "packaging": null,
+          "is_featured": false,
+          "tier": "standard",
+          "meal_credit_price": 12,
+          "half_meal_credit_price": 12,
+          "extended_kitchen_meal_credit_price": 13,
+          "extended_kitchen_half_meal_credit_price": 13,
+          "classic_kitchen_savings_meal_credit_price": 11,
+          "classic_kitchen_savings_half_meal_credit_price": 11,
+          "mp_discount_percentage": "0.35",
+          "meal": {
+            "id": "b0b50000-0000-4000-8000-0000000000m4",
+            "name": "You Wanna Pizza Me? Pie",
+            "description": "personal pizza, mozzarella, basil, attitude",
+            "cuisine": "italian",
+            "image": "https://images.example/pizza-me.jpeg",
+            "veg": false,
+            "healthy": false,
+            "healthy_subtext": "",
+            "meal_group": "pizza",
+            "portion_size_key": "regular",
+            "retail_price_display_string": "$20.00",
+            "portion": "regular"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b0b50000-0000-4000-8000-0000000000r3",
+      "name": "Wagstaff Wharf Sushi",
+      "address": "1 Wonder Wharf",
+      "pick_up_instructions": "Under the big anchor.",
+      "special_access": false,
+      "priority": 1,
+      "mp_discount_percentage": 0.27,
+      "full_address": "1 Wonder Wharf, Seymour's Bay, NJ",
+      "kitchen_times": [
+        {
+          "before": "2026-07-24T14:30:00.000-04:00",
+          "open": "2026-07-24T11:00:00.000-04:00",
+          "close": "2026-07-24T14:30:00.000-04:00"
+        }
+      ],
+      "meal_credit_discount": 0,
+      "coordinates": { "longitude": "-73.99500000", "latitude": "40.60500000" },
+      "neighborhood": { "id": "b0b50000-0000-4000-8000-0000000000n2", "name": "Wonder Wharf" },
+      "schedules": [
+        {
+          "id": "b0b50000-0000-4000-8000-0000000000s5",
+          "priority": 1,
+          "packaging": null,
+          "is_featured": true,
+          "tier": "standard",
+          "meal_credit_price": 11.5,
+          "half_meal_credit_price": 11.5,
+          "extended_kitchen_meal_credit_price": 12.5,
+          "extended_kitchen_half_meal_credit_price": 12.5,
+          "classic_kitchen_savings_meal_credit_price": 10.5,
+          "classic_kitchen_savings_half_meal_credit_price": 10.5,
+          "mp_discount_percentage": "0.27",
+          "meal": {
+            "id": "b0b50000-0000-4000-8000-0000000000m5",
+            "name": "Kuchi Kopi Nightlight Roll",
+            "description": "glowing green roll, avocado, cucumber, jasmine rice",
+            "cuisine": "asian",
+            "image": "https://images.example/kuchi-kopi.jpeg",
+            "veg": false,
+            "healthy": true,
+            "healthy_subtext": "High Protein",
+            "meal_group": "sushi",
+            "portion_size_key": "regular",
+            "retail_price_display_string": "$19.00",
+            "portion": "regular"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b0b50000-0000-4000-8000-0000000000r4",
+      "name": "Marshmallow's Mediterranean",
+      "address": "9 Kingshead Island",
+      "pick_up_instructions": "Say hi to Marshmallow.",
+      "special_access": false,
+      "priority": 1,
+      "mp_discount_percentage": 0.2,
+      "full_address": "9 Kingshead Island, Seymour's Bay, NJ",
+      "kitchen_times": [
+        {
+          "before": "2026-07-24T14:30:00.000-04:00",
+          "open": "2026-07-24T11:00:00.000-04:00",
+          "close": "2026-07-24T14:30:00.000-04:00"
+        }
+      ],
+      "meal_credit_discount": 0,
+      "coordinates": { "longitude": "-73.96000000", "latitude": "40.63000000" },
+      "neighborhood": { "id": "b0b50000-0000-4000-8000-0000000000n3", "name": "Kingshead Island" },
+      "schedules": [
+        {
+          "id": "b0b50000-0000-4000-8000-0000000000s6",
+          "priority": 1,
+          "packaging": null,
+          "is_featured": false,
+          "tier": "standard",
+          "meal_credit_price": 9,
+          "half_meal_credit_price": 9,
+          "extended_kitchen_meal_credit_price": 10,
+          "extended_kitchen_half_meal_credit_price": 10,
+          "classic_kitchen_savings_meal_credit_price": 8,
+          "classic_kitchen_savings_half_meal_credit_price": 8,
+          "mp_discount_percentage": "0.2",
+          "meal": {
+            "id": "b0b50000-0000-4000-8000-0000000000m6",
+            "name": "The Falafel Waffle",
+            "description": "falafel pressed in a waffle iron, tahini, pickled onions",
+            "cuisine": "mediterranean",
+            "image": "https://images.example/falafel-waffle.jpeg",
+            "veg": true,
+            "healthy": true,
+            "healthy_subtext": "Plant Based",
+            "meal_group": "bowls",
+            "portion_size_key": "regular",
+            "retail_price_display_string": "$13.50",
+            "portion": "regular"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b0b50000-0000-4000-8000-0000000000r5",
+      "name": "It's Your Funeral Home Cafe",
+      "address": "125 Ocean Ave",
+      "pick_up_instructions": "Mort will find you.",
+      "special_access": false,
+      "priority": 1,
+      "mp_discount_percentage": 0.4,
+      "full_address": "125 Ocean Ave, Seymour's Bay, NJ",
+      "kitchen_times": [
+        {
+          "before": "2026-07-24T14:30:00.000-04:00",
+          "open": "2026-07-24T11:00:00.000-04:00",
+          "close": "2026-07-24T14:30:00.000-04:00"
+        }
+      ],
+      "meal_credit_discount": 0,
+      "coordinates": { "longitude": "-73.98500000", "latitude": "40.61800000" },
+      "neighborhood": { "id": "b0b50000-0000-4000-8000-0000000000n1", "name": "Ocean Avenue" },
+      "schedules": [
+        {
+          "id": "b0b50000-0000-4000-8000-0000000000s7",
+          "priority": 1,
+          "packaging": null,
+          "is_featured": false,
+          "tier": "standard",
+          "meal_credit_price": 8,
+          "half_meal_credit_price": 8,
+          "extended_kitchen_meal_credit_price": 9,
+          "extended_kitchen_half_meal_credit_price": 9,
+          "classic_kitchen_savings_meal_credit_price": 7,
+          "classic_kitchen_savings_half_meal_credit_price": 7,
+          "mp_discount_percentage": "0.4",
+          "meal": {
+            "id": "b0b50000-0000-4000-8000-0000000000m7",
+            "name": "Mort's Mystery Casket Combo",
+            "description": "contents unknown, guaranteed room temperature",
+            "cuisine": "latin",
+            "image": "https://images.example/mystery-casket.jpeg",
+            "veg": false,
+            "healthy": false,
+            "healthy_subtext": "",
+            "meal_group": "combos",
+            "portion_size_key": "regular",
+            "retail_price_display_string": "",
+            "portion": "regular"
+          }
+        }
+      ]
+    }
+  ]
+}

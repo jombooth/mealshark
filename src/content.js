@@ -729,6 +729,14 @@
     const expected = normalizeLookupText(getRestaurantName(meal));
 
     if (wrapper && normalizeLookupText(wrapper.textContent).includes(expected)) {
+      // Blur the focused card first: the modal restores focus to it on close,
+      // which would scroll the panel back to that card.
+      const active = document.activeElement;
+
+      if (active instanceof HTMLElement && active.closest("#mealshark-root")) {
+        active.blur();
+      }
+
       wrapper.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       return;
     }
@@ -1287,4 +1295,20 @@
   }
 
   init();
+
+  // Test-only exports; inert in the browser (no `module` in content scripts).
+  if (typeof module === "object" && module !== null && module.exports) {
+    module.exports = {
+      state,
+      normalizeMealPalFilter,
+      hasActiveMealPalCreditFilter,
+      mealMatchesMealPalFilter,
+      mealInMapBounds,
+      sortMeals,
+      formatDiscount,
+      formatCreditPrice,
+      getEffectiveMealPrice,
+      buildSummaryTitle
+    };
+  }
 })();

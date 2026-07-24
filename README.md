@@ -54,7 +54,27 @@ by MealPal.
 - `assets/icons/` contains packaged extension icons.
 - `assets/store/` contains Chrome Web Store listing images and screenshots.
 - `docs/` contains implementation notes and release runbooks.
+- `tests/` contains the unit test suite and its synthetic fixtures.
 - `PRIVACY.md` is the public privacy policy for the Chrome Web Store listing.
+
+## Testing
+
+Run the unit tests (no dependencies beyond Node 18+) with:
+
+```bash
+node --test "tests/**/*.test.js"
+```
+
+The tests load the content scripts under a minimal browser shim
+(`tests/helpers/env.js`) and exercise response normalization, pal pricing,
+computed discounts, native-filter matching, sorting, and map-bounds logic
+against the fixtures in `tests/fixtures/`.
+
+**Fixture policy: no real MealPal data, ever.** This is a public repository,
+so every fixture must be entirely synthetic. As an easy-to-enforce convention,
+all fixture data is Bob's Burgers themed (Seymour's Bay, Ocean Ave, Burger of
+the Day meals). If a real restaurant, meal, address, or identifier appears
+anywhere in `tests/`, treat it as a policy violation and replace it.
 
 ## Build
 
