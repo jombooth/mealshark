@@ -40,7 +40,8 @@
     newOnly: false,
     mapAreaOnly: false,
     sortMode: SORT_MODES.DISCOUNT,
-    selectedMealKey: ""
+    selectedMealKey: "",
+    openDetailToken: 0
   };
 
   const dom = {};
@@ -715,6 +716,30 @@
     return meal.scheduleId || meal.mealId || `${meal.restaurantId}:${getMealName(meal)}`;
   }
 
+  // The popup this waits for can trail a cross-city map pan by several seconds.
+  const OPEN_DETAIL_POLL_MS = 250;
+  const OPEN_DETAIL_POLL_LIMIT = 24;
+
+  function openMealDetailWhenReady(meal, token, attempt = 0) {
+    if (token !== state.openDetailToken) {
+      return;
+    }
+
+    const wrapper = document.querySelector(".mapbox-popup__wrapper");
+    const expected = normalizeLookupText(getRestaurantName(meal));
+
+    if (wrapper && normalizeLookupText(wrapper.textContent).includes(expected)) {
+      wrapper.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      return;
+    }
+
+    if (attempt < OPEN_DETAIL_POLL_LIMIT) {
+      window.setTimeout(() => {
+        openMealDetailWhenReady(meal, token, attempt + 1);
+      }, OPEN_DETAIL_POLL_MS);
+    }
+  }
+
   function postMapAction(action, meal) {
     window.postMessage(
       {
@@ -1111,8 +1136,26 @@
     });
 
     card.addEventListener("click", () => {
+      const wasSelected = state.selectedMealKey === mealKey;
+      const modal = document.querySelector(".ReactModal__Content");
+      const modalMeal = modal ? getMealForModal(modal) : null;
+      const modalShowsThisMeal = Boolean(modalMeal) && getMealKey(modalMeal) === mealKey;
+
+      // Switching meals while a meal modal is open closes it.
+      if (modal && !modalShowsThisMeal) {
+        modal.querySelector(".modal-close-button")?.click();
+      }
+
       state.selectedMealKey = mealKey;
+      state.openDetailToken += 1;
       postMapAction("select", meal);
+
+      // A second click on the already-selected card opens its meal modal
+      // (via the map popup, which works even when the native tile isn't rendered).
+      if (wasSelected && !modalShowsThisMeal) {
+        openMealDetailWhenReady(meal, state.openDetailToken);
+      }
+
       render();
     });
 

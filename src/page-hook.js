@@ -25,6 +25,7 @@
   let latestFavoriteRestaurants = null;
   let searchInputDebounce = 0;
   let mapActionToken = 0;
+  let mapActionGeneration = 0;
   let cachedMapController = null;
   let latestMapBoundsSignature = "";
 
@@ -434,16 +435,19 @@
       fiber = fiber.return;
     }
 
+    // Use a fresh visited set: the upward walk above marked #map's ancestors
+    // as seen, which would prune the traversal right at the root path.
+    const fallbackSeen = new Set();
     const stack = [getReactRootFiber()];
 
     while (stack.length) {
       const currentFiber = stack.pop();
 
-      if (!currentFiber || seen.has(currentFiber)) {
+      if (!currentFiber || fallbackSeen.has(currentFiber)) {
         continue;
       }
 
-      seen.add(currentFiber);
+      fallbackSeen.add(currentFiber);
 
       const controller = scanHooks(currentFiber);
 
@@ -990,9 +994,19 @@
   }
 
   function highlightRestaurantWithRetry(restaurantId, token, attempt = 0) {
+    if (token !== mapActionToken) {
+      return;
+    }
+
     const controller = findMapController();
 
-    if (!controller || !controller.isInitialized || token !== mapActionToken) {
+    if (!controller || !controller.isInitialized) {
+      if (attempt < 8) {
+        window.setTimeout(() => {
+          highlightRestaurantWithRetry(restaurantId, token, attempt + 1);
+        }, 125);
+      }
+
       return;
     }
 
@@ -1007,34 +1021,58 @@
   }
 
   function createPopupWhenReady(restaurantId, token, payload, attempt = 0) {
-    const controller = findMapController();
-    const restaurant = findRestaurant(controller, restaurantId);
-
-    if (!controller || !controller.isInitialized || token !== mapActionToken) {
+    if (token !== mapActionToken) {
       return;
     }
 
-    if (restaurant?.coordinates) {
+    const controller = findMapController();
+    const restaurant = findRestaurant(controller, restaurantId);
+    // The controller can briefly disappear during app re-renders (e.g. when a
+    // meal modal closes); keep retrying rather than bailing.
+    const controllerReady = Boolean(controller?.isInitialized);
+    // A popup created while the map is still panning gets destroyed with the
+    // pan; wait for the camera to settle first (cross-city pans take seconds).
+    const mapMoving = controllerReady && controller.map?.isMoving?.() === true;
+
+    if (attempt % 5 === 0 || (controllerReady && !mapMoving)) {
+    }
+
+    if (controllerReady && !mapMoving && restaurant?.coordinates) {
       controller.createPopup(restaurant);
       return;
     }
 
-    if (attempt < 8) {
+    if (attempt < 30) {
       window.setTimeout(() => {
         createPopupWhenReady(restaurantId, token, payload, attempt + 1);
-      }, 125);
+      }, 200);
       return;
     }
 
-    openFallbackPopup(controller, payload);
+    if (controllerReady) {
+    }
   }
 
-  function handleMapAction(payload) {
+  function handleMapAction(payload, generation = (mapActionGeneration += 1), attempt = 0) {
+
+    // A newer action supersedes any pending retries of this one.
+    if (generation !== mapActionGeneration) {
+      return;
+    }
+
     const action = payload?.action;
     const restaurantId = safeString(payload?.restaurantId);
     const controller = findMapController();
 
     if (!controller || !controller.isInitialized) {
+      // The controller can briefly disappear during app re-renders (e.g. when
+      // a meal modal closes); retry instead of dropping the action.
+      if (action !== "clear" && attempt < 15) {
+        window.setTimeout(() => {
+          handleMapAction(payload, generation, attempt + 1);
+        }, 200);
+      }
+
       return;
     }
 
